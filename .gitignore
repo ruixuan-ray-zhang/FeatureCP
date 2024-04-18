@@ -1,3 +1,4 @@
 .DS_Store
 .idea
 ./visualization
+model_zoo/bmnet+/bmnet+_resnet_fsc147.pth
