@@ -4,6 +4,7 @@ import torchvision
 from torchvision.models._utils import IntermediateLayerGetter
 
 import copy 
+import sys
 
 """
    ************************************
@@ -284,7 +285,7 @@ class BMNet(nn.Module):
         self.EPF_extractor = EPF_extractor
         self.refiner = refiner
         self.matcher = matcher
-        self.g = counter
+        self.counter = counter
 
         self.backbone = backbone
         self.hidden_dim = hidden_dim
@@ -325,7 +326,7 @@ class BMNet(nn.Module):
         """ 
         counting_feature = self.encoder(samples, patches, is_train)
         # Stage 4: predicting density map 
-        density_map = self.g(counting_feature)
+        density_map = self.counter(counting_feature)
         
         if not is_train:
             return density_map
@@ -356,8 +357,15 @@ def make_bmnet(cfg):
 
     model = BMNet(backbone, epf_extractor, refiner, matcher, counter, cfg.MODEL.hidden_dim)
 
-    checkpoint = torch.load(cfg.VAL.resume, map_location='cpu')
-    model.load_state_dict(checkpoint['model'])
+    current_path = os.path.dirname(os.path.abspath(__file__))
+    parent_path = os.path.dirname(current_path)
+    sys.path.append(parent_path)
+
+    if os.path.isfile(cfg.VAL.resume):
+            checkpoint = torch.load(cfg.VAL.resume, map_location='cpu')
+            model.load_state_dict(checkpoint['model'])
+    else:
+        print('model state dict not found.')
 
     return model
 
@@ -368,7 +376,7 @@ if __name__ == '__main__':
     from config import cfg
 
     parser = argparse.ArgumentParser(
-        description="Class Agnostic Object Counting in PyTorch"
+        description="BMNet+"
     )
     parser.add_argument(
         "--cfg",
@@ -379,8 +387,6 @@ if __name__ == '__main__':
     )
     args = parser.parse_args()
     cfg.merge_from_file(args.cfg)
-    cfg.VAL.resume = os.path.join(cfg.DIR.output_dir, cfg.VAL.resume)
+    cfg.VAL.resume = "bmnet+_resnet_fsc147.pth"
 
-    with open(os.path.join(cfg.DIR.output_dir, 'config.yaml'), 'w') as f:
-        f.write("{}".format(cfg))
     model = make_bmnet(cfg)
