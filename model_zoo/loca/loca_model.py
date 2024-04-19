@@ -570,7 +570,7 @@ class LOCA(nn.Module):
 
         self.pos_emb = PositionalEncodingsFixed(emb_dim)
 
-    def forward(self, x, bboxes):
+    def encoder(self, x, bboxes):
         num_objects = bboxes.size(1) if not self.zero_shot else self.num_objects
         # backbone
         backbone_features = self.backbone(x)
@@ -591,30 +591,32 @@ class LOCA(nn.Module):
 
         all_prototypes = self.ope(f_e, pos_emb, bboxes)
 
-        outputs = list()
-        for i in range(all_prototypes.size(0)):
-            prototypes = all_prototypes[i, ...].permute(1, 0, 2).reshape(
+        prototypes = all_prototypes[-1, ...].permute(1, 0, 2).reshape(
                 bs, num_objects, self.kernel_dim, self.kernel_dim, -1
             ).permute(0, 1, 4, 2, 3).flatten(0, 2)[:, None, ...]
 
-            response_maps = F.conv2d(
-                torch.cat([f_e for _ in range(num_objects)], dim=1).flatten(0, 1).unsqueeze(0),
-                prototypes,
-                bias=None,
-                padding=self.kernel_dim // 2,
-                groups=prototypes.size(0)
-            ).view(
-                bs, num_objects, self.emb_dim, h, w
-            ).max(dim=1)[0]
+        response_maps = F.conv2d(
+            torch.cat([f_e for _ in range(num_objects)], dim=1).flatten(0, 1).unsqueeze(0),
+            prototypes,
+            bias=None,
+            padding=self.kernel_dim // 2,
+            groups=prototypes.size(0)
+        ).view(
+            bs, num_objects, self.emb_dim, h, w
+        ).max(dim=1)[0]
 
-            # send through regression heads
-            if i == all_prototypes.size(0) - 1:
-                predicted_dmaps = self.regression_head(response_maps)
-            else:
-                predicted_dmaps = self.aux_heads[i](response_maps)
-            outputs.append(predicted_dmaps)
+        return response_maps
 
-        return outputs[-1], outputs[:-1]
+    def g(self, response_maps):
+        predicted_dmaps = self.regression_head(response_maps)
+        return predicted_dmaps
+
+
+    def forward(self, x, bboxes):
+        response_maps = self.encoder(x, bboxes)
+        outputs = self.g(response_maps)
+
+        return outputs
 
 def build_model(args):
 

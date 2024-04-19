@@ -308,6 +308,8 @@ class BMNet(nn.Module):
 
         return counting_feature
 
+    def g(self, counting_feature):
+        return self.counter(counting_feature)
         
     def forward(self, samples: torch.Tensor, patches: torch.Tensor, is_train: bool):
         """ The forward expects samples containing query images and corresponding exemplar patches.
@@ -326,7 +328,7 @@ class BMNet(nn.Module):
         """ 
         counting_feature = self.encoder(samples, patches, is_train)
         # Stage 4: predicting density map 
-        density_map = self.counter(counting_feature)
+        density_map = self.g(counting_feature)
         
         if not is_train:
             return density_map
