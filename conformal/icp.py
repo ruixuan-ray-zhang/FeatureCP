@@ -320,6 +320,7 @@ class FeatRegressorNc(BaseModelNc):
         accumulate_val_num = 0
         print("begin to find the best step number")
         for x, _, y in tqdm(dataloader):
+            y = y['density_map']
             x, y = x.to(self.model.device), y.to(self.model.device)
             z_pred = self.model.model.encoder(x)
             # batch_each_step_val_coverage, val_num = self.coverage_loose(x, y, z_pred, steps=max_inv_steps, val_significance=val_significance)  # length: max_inv_steps
@@ -375,7 +376,10 @@ class FeatRegressorNc(BaseModelNc):
 
         print('calculating score:')
         ret_val = []
-        for x, _, y in tqdm(dataloader):
+        for x, patches, y in tqdm(dataloader):
+            y = y['density_map']
+            patches['scale_embedding'] = patches['scale_embedding'].to(self.model.device)
+            patches['patches'] = patches['patches'].to(self.model.device)
             x, y = x.to(self.model.device), y.to(self.model.device)
 
             if self.normalizer is not None:
@@ -383,7 +387,7 @@ class FeatRegressorNc(BaseModelNc):
             else:
                 norm = np.ones(len(x))
 
-            z_pred = self.model.model.encoder(x)
+            z_pred = self.model.model.encoder(x, patches, is_train=False)
             z_true = self.inv_g(z_pred, y, step=self.inv_step)
             batch_ret_val = self.err_func.apply(z_pred.detach().cpu(), z_true.detach().cpu())
             batch_ret_val = batch_ret_val.detach().cpu().numpy() / norm

@@ -3,6 +3,7 @@ import numpy as np
 from PIL import Image
 from torch import Tensor
 from torchvision.transforms import ToPILImage, GaussianBlur
+from torchvision import transforms
 
 
 class PILToLongTensor(object):
@@ -76,3 +77,60 @@ class ToOnehotGaussianBlur(object):
         # the first log makes the value doman [-inf, 0], the second log makes it [-inf, inf]
         double_log_blurred = torch.log(-torch.log(blurred))
         return label, double_log_blurred
+
+def pad_to_constant(inputs, psize):
+    h, w = inputs.size()[-2:]
+    ph, pw = (psize-h%psize),(psize-w%psize)
+    # print(ph,pw)
+
+    (pl, pr) = (pw//2, pw-pw//2) if pw != psize else (0, 0)   
+    (pt, pb) = (ph//2, ph-ph//2) if ph != psize else (0, 0)
+    if (ph!=psize) or (pw!=psize):
+        tmp_pad = [pl, pr, pt, pb]
+        # print(tmp_pad)
+        inputs = torch.nn.functional.pad(inputs, tmp_pad)
+    
+    return inputs
+    
+
+class MainTransform(object):
+    def __init__(self):
+        self.img_trans = transforms.Compose([transforms.ToTensor(), transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225])])
+    def __call__(self, img, target):
+        img = self.img_trans(img)
+        density_map = target['density_map']
+        pt_map = target['pt_map']
+        pt_map = torch.from_numpy(pt_map).unsqueeze(0)
+        density_map = torch.from_numpy(density_map).unsqueeze(0)
+        
+        img = pad_to_constant(img, 32)
+        density_map = pad_to_constant(density_map, 32)
+        pt_map = pad_to_constant(pt_map, 32)
+        target['density_map'] = density_map.float()
+        target['pt_map'] = pt_map.float()
+        
+        return img, target
+
+
+def get_query_transforms(is_train, exemplar_size):
+    if is_train:
+        # SimCLR style augmentation
+        return transforms.Compose([
+            transforms.Resize(exemplar_size),
+            #transforms.RandomApply([
+            #    transforms.ColorJitter(0.4, 0.4, 0.4, 0.1)  # not strengthened
+            #], p=0.8),
+            #transforms.RandomGrayscale(p=0.2),
+            #transforms.RandomApply([GaussianBlur([.1, 2.])], p=0.5),
+            transforms.ToTensor(),
+            # transforms.RandomHorizontalFlip(),  HorizontalFlip may cause the pretext too difficult, so we remove it
+            transforms.Normalize(mean=[0.485, 0.456, 0.406],
+                                 std=[0.229, 0.224, 0.225])
+        ])
+    else:
+        return transforms.Compose([
+            transforms.Resize(exemplar_size),
+            transforms.ToTensor(),
+            transforms.Normalize(mean=[0.485, 0.456, 0.406],
+                                 std=[0.229, 0.224, 0.225])
+        ])

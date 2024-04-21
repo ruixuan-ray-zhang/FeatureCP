@@ -618,8 +618,12 @@ class LOCA(nn.Module):
 
         return outputs
 
-def build_model(args):
+class AttrDict(dict):
+    def __init__(self, *args, **kwargs):
+        super(AttrDict, self).__init__(*args, **kwargs)
+        self.__dict__ = self
 
+def make_loca(args,device):
     assert args.backbone in ['resnet18', 'resnet50', 'resnet101']
     assert args.reduction in [4, 8, 16]
 
@@ -646,14 +650,14 @@ def build_model(args):
     
     current_path = os.path.dirname(os.path.abspath(__file__))
     args.model_path = current_path
-    state_dict = torch.load(os.path.join(args.model_path, f'{args.model_name}.pt'), map_location='cpu')['model']
+    state_dict = torch.load(os.path.join(args.model_path, f'{args.model_name}.pt'), map_location=device)['model']
     model.load_state_dict(state_dict)
 
     return model
 
-def get_argparser():
+def configure_loca_parser(parser):
 
-    parser = argparse.ArgumentParser("LOCA parser", add_help=False)
+    # parser = argparse.ArgumentParser("LOCA parser", add_help=False)
 
     parser.add_argument('--model_name', default='loca_few_shot', type=str)
     parser.add_argument(
@@ -691,10 +695,30 @@ def get_argparser():
     parser.add_argument('--zero_shot', action='store_true')
     parser.add_argument('--pre_norm', action='store_true')
 
-    return parser
+    # return parser
 
 if __name__ == "__main__":
 
-    parser = argparse.ArgumentParser('LOCA', parents=[get_argparser()])
+    # parser = argparse.ArgumentParser('LOCA', parents=[get_argparser()])
+    # args = parser.parse_args()
+    # model = build_model(args)
+
+    import os
+    import argparse
+    from config import cfg
+
+    parser = argparse.ArgumentParser(
+        description="loca"
+    )
+    parser.add_argument(
+        "--cfg",
+        default="config/loca.yaml",
+        metavar="FILE",
+        help="path to config file",
+        type=str,
+    )
     args = parser.parse_args()
-    model = build_model(args)
+    cfg.merge_from_file(args.cfg)
+    cfg.VAL.resume = "loca_few_shot.pt"
+
+    model = make_loca(cfg)

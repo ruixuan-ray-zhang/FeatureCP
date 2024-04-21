@@ -6,6 +6,9 @@ import os
 from tqdm import tqdm
 from functools import partial
 import numpy as np
+import sys
+import yaml
+
 np.warnings.filterwarnings('ignore')
 
 import torch.utils.data as data
@@ -26,6 +29,13 @@ from conformal.fcn_model import make_fcn, FCN, enet_weighing
 from conformal.icp import IcpRegressor, RegressorNc, FeatRegressorNc
 from conformal.icp import AbsErrorErrFunc, FeatErrorErrFunc
 from conformal.utils import compute_coverage, WeightedMSE, seed_torch
+
+from datasets.FSC147 import batch_collate_fn
+
+from model_zoo.bmnet.bmnet_model import make_bmnet
+from model_zoo.loca.loca_model import make_loca, configure_loca_parser, AttrDict
+from model_zoo.bmnet.config import cfg
+
 
 torch.backends.cuda.matmul.allow_tf32 = False
 torch.backends.cudnn.allow_tf32 = False
@@ -93,20 +103,31 @@ def load_dataset(dataset, seed):
     print("Selected dataset:", args.data)
     print("Dataset directory:", args.dataset_dir)
 
-    image_transform = transforms.Compose(
-        [transforms.Resize((args.height, args.width)),
-         transforms.ToTensor()])
+    # image_transform = transforms.Compose(
+    #     [transforms.Resize((args.height, args.width)),
+    #      transforms.ToTensor()])
 
-    label_transform = transforms.Compose([
-        transforms.Resize((args.height, args.width), Image.NEAREST),
-        ext_transforms.PILToLongTensor(),
-        ext_transforms.ToOnehotGaussianBlur(kernel_size=7, num_classes=dataset.num_classes)
-    ])
+    # label_transform = transforms.Compose([
+    #     transforms.Resize((args.height, args.width), Image.NEAREST),
+    #     ext_transforms.PILToLongTensor(),
+    #     ext_transforms.ToOnehotGaussianBlur(kernel_size=7, num_classes=dataset.num_classes)
+    # ])
 
-    whole_train_set = dataset(
-        args.dataset_dir,
-        transform=image_transform,
-        label_transform=label_transform)
+    # whole_train_set = dataset(
+    #     data_dir = args.dataset_dir,
+    #     transform=ext_transforms.MainTransform(),
+    #     label_transform=None)
+
+    main_transform = ext_transforms.MainTransform()
+    query_transform = ext_transforms.get_query_transforms(is_train=True, exemplar_size=(128, 128))
+
+    whole_train_set = dataset(data_dir=args.dataset_dir,
+                            data_list=args.dataset_dir +'/whole.txt',
+                            box_number=3,
+                            scaling=1.0,
+                            main_transform=main_transform,
+                            query_transform=query_transform)
+    
 
     if args.data_seed is None:
         cal_test_generator = torch.Generator().manual_seed(seed)
@@ -121,13 +142,16 @@ def load_dataset(dataset, seed):
         batch_size=args.batch_size,
         shuffle=True,
         num_workers=args.workers,
-        pin_memory=True)
+        pin_memory=True,
+        collate_fn=batch_collate_fn
+        )
     cal_loader = data.DataLoader(
         cal_set,
         batch_size=args.batch_size,
         shuffle=False,
         num_workers=args.workers,
-        pin_memory=True
+        pin_memory=True,
+        collate_fn=batch_collate_fn
     )
 
     test_loader = data.DataLoader(
@@ -135,51 +159,74 @@ def load_dataset(dataset, seed):
         batch_size=args.batch_size,
         shuffle=False,
         num_workers=args.workers,
-        pin_memory=True)
+        pin_memory=True,
+        collate_fn=batch_collate_fn)
 
     # Get encoding between pixel valus in label images and RGB colors
-    class_encoding = whole_train_set.color_encoding
+    # class_encoding = whole_train_set.color_encoding
 
     # Get number of classes to predict
-    num_classes = len(class_encoding)
+    # num_classes = len(class_encoding)
 
     # Print information for debugging
-    print("Number of classes to predict:", num_classes)
+    # print("Number of classes to predict:", num_classes)
     print("Train dataset size:", len(train_set))
     print("Calibration dataset size:", len(cal_set))
     print("test dataset size:", len(test_set))
 
     # Get a batch of samples to display
-    images, _, labels = iter(train_loader).next()
+    images, _, _ = iter(train_loader).next()
     print("Image size:", images.size())
-    print("Label size:", labels.size())
-    print("Class-color encoding:", class_encoding)
+    # print("Label size:", labels.size())
+    # print("Class-color encoding:", class_encoding)
 
-    print("Computing class weights...")
-    print("(this can take a while depending on the dataset size)")
-    class_weights = enet_weighing(train_loader, num_classes)
-    if class_weights is not None:
-        class_weights = torch.from_numpy(class_weights).float().to(device)
-        # Set the weight of the unlabeled class to 0
-        ignore_index = list(class_encoding).index('unlabeled')
-        class_weights[ignore_index] = 0
+    # print("Computing class weights...")
+    # print("(this can take a while depending on the dataset size)")
+    # class_weights = enet_weighing(train_loader, num_classes)
+    # if class_weights is not None:
+    #     class_weights = torch.from_numpy(class_weights).float().to(device)
+    #     # Set the weight of the unlabeled class to 0
+    #     ignore_index = list(class_encoding).index('unlabeled')
+    #     class_weights[ignore_index] = 0
 
-    print("Class weights:", class_weights)
+    # print("Class weights:", class_weights)
 
-    return (train_loader, cal_loader, test_loader), class_weights, class_encoding
+    # return (train_loader, cal_loader, test_loader), class_weights, class_encoding
+    return (train_loader, cal_loader, test_loader)
 
+def load_bmnet_model(args):
+    cfg.merge_from_file(args.bmnet_cfg)
+    cfg.VAL.resume = "model_zoo/bmnet/bmnet_resnet_fsc147.pth"
+    model = make_bmnet(cfg,device)
+    return model
+
+def load_loca_model(args):
+    with open(args.loca_cfg, 'r') as file:
+        config = yaml.safe_load(file)
+    model = make_loca(config,device)
+    return model
 
 def main(train_loader, cal_loader, test_loader, args):
-    dir = f"ckpt/{args.data}"
-    if os.path.exists(os.path.join(dir, "model.pt")):
+    dir = f"model_zoo/{args.model}"
+    if 'FCN' in args.model:
         model = make_fcn(pretrained=True, img_shape=image_shape, num_classes=20)
-        print(f"==> Load model from {dir}")
         model.load_state_dict(torch.load(os.path.join(dir, "model.pt"), map_location=device)['state_dict'])
+    elif 'bmnet' in args.model:
+        model = load_bmnet_model(args)
+    elif 'loca' in args.model:
+        model = load_loca_model(args)
     else:
         raise ValueError("does not find the checkpoint in {}".format(dir))
 
+    print(f"==> Load model from {dir}")
+
+    # mean_estimator = helper.MSENet_RegressorAdapter(model=model, device=device, fit_params=None,
+    #                                                 in_shape=image_shape, out_shape=args.height*args.width*num_classes,
+    #                                                 hidden_size=args.hidden_size, learn_func=nn_learn_func, epochs=args.epochs,
+    #                                                 batch_size=args.batch_size, dropout=args.dropout, lr=args.lr, wd=args.wd,
+    #                                                 test_ratio=cv_test_ratio, random_state=cv_random_state, )
+    
     mean_estimator = helper.MSENet_RegressorAdapter(model=model, device=device, fit_params=None,
-                                                    in_shape=image_shape, out_shape=args.height*args.width*num_classes,
                                                     hidden_size=args.hidden_size, learn_func=nn_learn_func, epochs=args.epochs,
                                                     batch_size=args.batch_size, dropout=args.dropout, lr=args.lr, wd=args.wd,
                                                     test_ratio=cv_test_ratio, random_state=cv_random_state, )
@@ -190,12 +237,16 @@ def main(train_loader, cal_loader, test_loader, args):
     else:
         args.feat_norm = float(args.feat_norm)
 
-    criterion = WeightedMSE(out_shape=(args.height, args.width), weight=class_weights)
+    criterion = WeightedMSE(out_shape=None, weight=None)
 
     # FeatureCP
+    # nc = FeatRegressorNc(mean_estimator, criterion=criterion, inv_lr=args.feat_lr, inv_step=args.feat_step,
+    #                      feat_norm=args.feat_norm, certification_method=args.cert_method,
+    #                      g_out_process=partial(model.output_post_process, img_shape=image_shape))
     nc = FeatRegressorNc(mean_estimator, criterion=criterion, inv_lr=args.feat_lr, inv_step=args.feat_step,
                          feat_norm=args.feat_norm, certification_method=args.cert_method,
-                         g_out_process=partial(model.output_post_process, img_shape=image_shape))
+                         g_out_process=None)
+
     icp = IcpRegressor(nc)
 
     icp.calibrate_batch(cal_loader)
@@ -248,9 +299,11 @@ def main(train_loader, cal_loader, test_loader, args):
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
+    # subparsers = parser.add_subparsers(title="commands", dest="command")
+
     parser.add_argument("--device", "--d", default=-1, type=int)
     parser.add_argument('--seed', type=int, nargs='+', default=[0])
-    parser.add_argument("--data", type=str, default="cityscapes", help="only support cityscapes now", choices=['cityscapes'])
+    parser.add_argument("--data", type=str, default="cityscapes", help="only support FSC147 now", choices=['FSC147'])
     parser.add_argument("--data-seed", type=int, default=None, help="the random seed to split the calibration and test sets")
     parser.add_argument("--dataset-dir", type=str, default=None,
                         help="Path to the root directory of the selected dataset.")
@@ -258,8 +311,8 @@ if __name__ == '__main__':
 
     parser.add_argument("--alpha", type=float, default=0.1, help="miscoverage error")
 
-    parser.add_argument("--height", type=int, default=256, help="The image height. Default: 512")
-    parser.add_argument("--width", type=int, default=512, help="The image width. Default: 1024")
+    # parser.add_argument("--height", type=int, default=256, help="The image height. Default: 512")
+    # parser.add_argument("--width", type=int, default=512, help="The image width. Default: 1024")
 
     parser.add_argument("--lr", type=float, default=5e-4)
     parser.add_argument("--epochs", type=int, default=10)
@@ -276,6 +329,12 @@ if __name__ == '__main__':
     parser.add_argument("--cert_method", "--cm", type=int, default=0, choices=[0, 1, 2, 3])
 
     parser.add_argument("--visualize", action="store_true", default=False, help="visualize the length in the image")
+    parser.add_argument("--model", type=str, default="bmnet", help="only support bmnet, loca now", choices=['loca','bmnet'])
+    parser.add_argument("--bmnet_cfg", type=str, default="model_zoo/bmnet/config/bmnet_fsc147.yaml", help="Path to config file for bmnet")
+    parser.add_argument("--loca_cfg", type=str, default="model_zoo/loca/config/loca.yaml", help="Path to config file for loca")
+    # loca_parser = subparsers.add_parser("loca", help="LOCA command")
+    # configure_loca_parser(loca_parser)
+
     args = parser.parse_args()
 
     fcp_coverage_list, fcp_length_list, cp_coverage_list, cp_length_list = [], [], [], []
@@ -301,17 +360,21 @@ if __name__ == '__main__':
 
         if args.data.lower() == 'cityscapes':
             from datasets.cityscapes import Cityscapes as dataset
+        elif args.data == 'FSC147':
+            from datasets.FSC147 import FSC147 as dataset
         else:
             # Should never happen...but just in case it does
             raise RuntimeError("\"{0}\" is not a supported dataset.".format(
                 args.dataset))
-        (train_loader, cal_loader, test_loader), class_weights, class_encoding = load_dataset(dataset, seed)
-        # remove the first dimension "unlabeled"
-        class_weights = class_weights[1:]
+        # (train_loader, cal_loader, test_loader), class_weights, class_encoding = load_dataset(dataset, seed)
+        (train_loader, cal_loader, test_loader) = load_dataset(dataset, seed)
 
-        image_shape = (args.height, args.width)
-        n_train = len(train_loader.dataset)
-        num_classes = len(class_encoding)
+        # remove the first dimension "unlabeled"
+        # class_weights = class_weights[1:]
+
+        # image_shape = (args.height, args.width)
+        # n_train = len(train_loader.dataset)
+        # num_classes = len(class_encoding)
 
         print("Dataset: %s" % (args.data))
 
