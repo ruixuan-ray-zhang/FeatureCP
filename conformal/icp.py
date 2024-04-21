@@ -213,15 +213,9 @@ class FeatRegressorNc(BaseModelNc):
         self.model.model.eval()
         each_step_z = []
         for _ in range(step):
-            print("z",z.shape)
             pred = self.model.model.g(z)
-            print("pred",pred.shape)
             if self.g_out_process is not None:
                 pred = self.g_out_process(pred)
-            print("pred-g-out",pred.shape)
-            pdb.set_trace()
-
-
             loss = self.criterion(pred.squeeze(), y)
             optimizer.zero_grad()
             loss.backward()
@@ -383,8 +377,6 @@ class FeatRegressorNc(BaseModelNc):
         ret_val = []
         for x, _, y in tqdm(dataloader):
             x, y = x.to(self.model.device), y.to(self.model.device)
-            print("x",x.shape)
-            print("y",y.shape)
 
             if self.normalizer is not None:
                 raise NotImplementedError
@@ -394,11 +386,6 @@ class FeatRegressorNc(BaseModelNc):
             z_pred = self.model.model.encoder(x)
             z_true = self.inv_g(z_pred, y, step=self.inv_step)
             batch_ret_val = self.err_func.apply(z_pred.detach().cpu(), z_true.detach().cpu())
-            print("z_pred",z_pred.shape)
-            print("z_true",z_true.shape)
-            print("batch_ret_val",batch_ret_val.shape)
-            pdb.set_trace()
-
             batch_ret_val = batch_ret_val.detach().cpu().numpy() / norm
             ret_val.append(batch_ret_val)
         ret_val = np.concatenate(ret_val, axis=0)
@@ -543,11 +530,15 @@ class IcpRegressor(BaseIcp):
         if n_significance > 1:
             prediction = np.zeros((x.shape[0], self.nc_function.model.model.out_shape, 2, n_significance))
         else:
+            print("x",x.shape)
+            print("self.nc_function.model.model.out_shape",self.nc_function.model.model.out_shape)
             prediction = np.zeros((x.shape[0], self.nc_function.model.model.out_shape, 2))
+            print("prediction",prediction.shape)
 
         condition_map = np.array([self.condition((x[i, :], None))
                                   for i in range(x.shape[0])])
-
+        print("condition_map",condition_map.shape)
+        pdb.set_trace()
         for condition in self.categories:
             idx = condition_map == condition
             if np.sum(idx) > 0:
