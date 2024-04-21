@@ -9,6 +9,7 @@ import sklearn.base
 from sklearn.base import BaseEstimator
 import torch
 from auto_LiRPA import BoundedModule, BoundedTensor, PerturbationLpNorm
+import pdb
 
 from .utils import compute_coverage, default_loss
 
@@ -377,6 +378,8 @@ class FeatRegressorNc(BaseModelNc):
         ret_val = []
         for x, _, y in tqdm(dataloader):
             x, y = x.to(self.model.device), y.to(self.model.device)
+            print("x",x.shape)
+            print("y",y.shape)
 
             if self.normalizer is not None:
                 raise NotImplementedError
@@ -386,6 +389,11 @@ class FeatRegressorNc(BaseModelNc):
             z_pred = self.model.model.encoder(x)
             z_true = self.inv_g(z_pred, y, step=self.inv_step)
             batch_ret_val = self.err_func.apply(z_pred.detach().cpu(), z_true.detach().cpu())
+            print("z_pred",z_pred.shape)
+            print("z_true",z_true.shape)
+            print("batch_ret_val",batch_ret_val.shape)
+            pdb.set_trace()
+
             batch_ret_val = batch_ret_val.detach().cpu().numpy() / norm
             ret_val.append(batch_ret_val)
         ret_val = np.concatenate(ret_val, axis=0)
