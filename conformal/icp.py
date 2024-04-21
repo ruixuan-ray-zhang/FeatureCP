@@ -213,9 +213,14 @@ class FeatRegressorNc(BaseModelNc):
         self.model.model.eval()
         each_step_z = []
         for _ in range(step):
+            print("z",z.shape)
             pred = self.model.model.g(z)
+            print("pred",pred.shape)
             if self.g_out_process is not None:
                 pred = self.g_out_process(pred)
+            print("pred-g-out",pred.shape)
+            pdb.set_trace()
+
 
             loss = self.criterion(pred.squeeze(), y)
             optimizer.zero_grad()
