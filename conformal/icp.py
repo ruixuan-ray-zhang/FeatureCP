@@ -389,6 +389,8 @@ class FeatRegressorNc(BaseModelNc):
 
             z_pred = self.model.model.encoder(x, patches, is_train=False)
             z_true = self.inv_g(z_pred, y, step=self.inv_step)
+            z_pred = z_pred.reshape(z_pred.shape[0],-1)
+            z_true = z_true.reshape(z_true.shape[0],-1)
             batch_ret_val = self.err_func.apply(z_pred.detach().cpu(), z_true.detach().cpu())
             batch_ret_val = batch_ret_val.detach().cpu().numpy() / norm
             ret_val.append(batch_ret_val)
