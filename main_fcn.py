@@ -258,8 +258,8 @@ def main(train_loader, cal_loader, test_loader, args):
     test_intervals = []
     all_y_test = []
     img_idx = 0
-    for x_test, discrete_y_test, y_test in tqdm(test_loader):
-        intervals = icp.predict(x_test, significance=alpha)
+    for x_test, patch_test , y_test in tqdm(test_loader):
+        intervals = icp.predict((x_test,patch_test), significance=alpha)
         test_intervals.append(intervals)
         all_y_test.append(y_test.cpu().numpy())
 
@@ -285,8 +285,8 @@ def main(train_loader, cal_loader, test_loader, args):
 
     test_intervals = []
     all_y_test = []
-    for x_test, _, y_test in tqdm(test_loader):
-        intervals = icp2.predict(x_test, significance=alpha)
+    for x_test, patch_test, y_test in tqdm(test_loader):
+        intervals = icp2.predict((x_test,patch_test), significance=alpha)
         test_intervals.append(intervals)
         all_y_test.append(y_test.cpu().numpy())
     test_intervals = np.concatenate(test_intervals, axis=0)

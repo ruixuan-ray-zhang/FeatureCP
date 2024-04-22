@@ -8,7 +8,7 @@ import ipdb
 from sklearn.base import BaseEstimator
 from sklearn.model_selection import train_test_split
 from functools import partial
-
+import pdb
 from conformal.icp import IcpRegressor
 
 
@@ -245,11 +245,20 @@ class LearnerOptimized:
 
     def predict(self, x):
         self.model.eval()
-        if isinstance(x, torch.Tensor):
+        patches = x[1]
+        x = x[0] # img
+        if isinstance(x, torch.Tensor) and isinstance(patches['patches'], torch.Tensor):
+            print(x.type)
+            print(patches['patches'].type)
+            print(self.device)
             x = x.to(self.device).requires_grad_(False)
+            patches['patches'] = patches['patches'].to(self.device).requires_grad_(False)
+            patches['scale_embedding'] = patches['scale_embedding'].to(self.device).requires_grad_(False)
         else:
             x = torch.from_numpy(x).to(self.device).requires_grad_(False)
-        ret_val = self.model(x).cpu().detach().numpy()
+            patches['patches'] = torch.from_numpy(patches['patches']).to(self.device).requires_grad_(False)
+            patches['scale_embedding'] = torch.from_numpy(patches['scale_embedding']).to(self.device).requires_grad_(False)
+        ret_val = self.model(x,patches,is_train=False).cpu().detach().numpy()
         return ret_val
 
 
