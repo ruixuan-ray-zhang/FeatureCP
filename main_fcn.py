@@ -27,6 +27,7 @@ from conformal.icp import IcpRegressor, RegressorNc, FeatRegressorNc
 from conformal.icp import AbsErrorErrFunc, FeatErrorErrFunc
 from conformal.utils import compute_coverage, WeightedMSE, seed_torch
 
+import pdb
 torch.backends.cuda.matmul.allow_tf32 = False
 torch.backends.cudnn.allow_tf32 = False
 
@@ -226,7 +227,9 @@ def main(train_loader, cal_loader, test_loader, args):
     all_y_test = np.concatenate(all_y_test, axis=0)
     # estimating the length of FCP
     y_lower, y_upper = test_intervals[..., 0], test_intervals[..., 1]
-    _, length_fcp = compute_coverage(all_y_test, y_lower, y_upper, alpha, "FeatRegressorNc")
+    kevin , length_fcp = compute_coverage(all_y_test, y_lower, y_upper, alpha, "FeatRegressorNc")
+    print('Kevin',kevin)
+    pdb.set_trace()
 
     # Vanilla CP
     icp2 = IcpRegressor(RegressorNc(mean_estimator))

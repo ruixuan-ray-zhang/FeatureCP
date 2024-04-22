@@ -538,7 +538,9 @@ class IcpRegressor(BaseIcp):
         condition_map = np.array([self.condition((x[i, :], None))
                                   for i in range(x.shape[0])])
         print("condition_map",condition_map.shape)
-        pdb.set_trace()
+        print("condition_map",condition_map)
+        print("self.categories",self.categories)
+        # pdb.set_trace()
         for condition in self.categories:
             idx = condition_map == condition
             if np.sum(idx) > 0:
