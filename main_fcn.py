@@ -41,6 +41,10 @@ def makedirs(path):
 
 
 def visualize(image, height, width, save_dir):
+    print(save_dir)
+    print('max',np.max(image))
+    print('min',np.min(image))
+
     fig, ax = plt.subplots()
     ax.imshow(image)
     plt.axis("off")
@@ -220,7 +224,7 @@ def main(train_loader, cal_loader, test_loader, args):
             for img_interval in show_interval:
                 img_interval = img_interval.reshape(19, args.height, args.width).mean(axis=0)
                 img_name = os.path.basename(test_loader.dataset.dataset.train_data[test_loader.dataset.indices[img_idx]])
-                visualize(img_interval, height=args.height, width=args.width, save_dir=os.path.join(f'visualization/seed{seed}', img_name))
+                visualize(img_interval, height=args.height, width=args.width, save_dir=os.path.join(f'visualization/seed{seed}', 'fcp-' + img_name))
                 img_idx += 1
 
     test_intervals = np.concatenate(test_intervals, axis=0)
@@ -228,8 +232,8 @@ def main(train_loader, cal_loader, test_loader, args):
     # estimating the length of FCP
     y_lower, y_upper = test_intervals[..., 0], test_intervals[..., 1]
     kevin , length_fcp = compute_coverage(all_y_test, y_lower, y_upper, alpha, "FeatRegressorNc")
-    print('Kevin',kevin)
-    pdb.set_trace()
+    # print('Kevin',kevin)
+    # pdb.set_trace()
 
     # Vanilla CP
     icp2 = IcpRegressor(RegressorNc(mean_estimator))
@@ -237,10 +241,21 @@ def main(train_loader, cal_loader, test_loader, args):
 
     test_intervals = []
     all_y_test = []
+    img_idx = 0
     for x_test, _, y_test in tqdm(test_loader):
         intervals = icp2.predict(x_test, significance=alpha)
         test_intervals.append(intervals)
         all_y_test.append(y_test.cpu().numpy())
+
+        if args.visualize:
+            loglog_interval = np.exp(-np.exp(intervals))
+            show_interval = np.abs(loglog_interval[..., 1] - loglog_interval[..., 0])
+            for img_interval in show_interval:
+                img_interval = img_interval.reshape(19, args.height, args.width).mean(axis=0)
+                img_name = os.path.basename(test_loader.dataset.dataset.train_data[test_loader.dataset.indices[img_idx]])
+                visualize(img_interval, height=args.height, width=args.width, save_dir=os.path.join(f'visualization/seed{seed}', 'Vanilla-' + img_name))
+                img_idx += 1
+
     test_intervals = np.concatenate(test_intervals, axis=0)
     all_y_test = np.concatenate(all_y_test, axis=0)
 

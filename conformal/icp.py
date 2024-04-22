@@ -530,16 +530,16 @@ class IcpRegressor(BaseIcp):
         if n_significance > 1:
             prediction = np.zeros((x.shape[0], self.nc_function.model.model.out_shape, 2, n_significance))
         else:
-            print("x",x.shape)
-            print("self.nc_function.model.model.out_shape",self.nc_function.model.model.out_shape)
+            # print("x",x.shape)
+            # print("self.nc_function.model.model.out_shape",self.nc_function.model.model.out_shape)
             prediction = np.zeros((x.shape[0], self.nc_function.model.model.out_shape, 2))
-            print("prediction",prediction.shape)
+            # print("prediction",prediction.shape)
 
         condition_map = np.array([self.condition((x[i, :], None))
                                   for i in range(x.shape[0])])
-        print("condition_map",condition_map.shape)
-        print("condition_map",condition_map)
-        print("self.categories",self.categories)
+        # print("condition_map",condition_map.shape)
+        # print("condition_map",condition_map)
+        # print("self.categories",self.categories)
         # pdb.set_trace()
         for condition in self.categories:
             idx = condition_map == condition
