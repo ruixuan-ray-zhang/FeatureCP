@@ -2,6 +2,7 @@ import torch
 from torch import nn
 import torchvision
 from torchvision.models._utils import IntermediateLayerGetter
+import torch.nn.functional as F
 
 import copy 
 import sys
@@ -278,7 +279,40 @@ class DensityX16(nn.Module):
         
     def forward(self, features):
         return self.regressor(features)
-    
+
+# class DensityX16(nn.Module):
+#     def __init__(self, counter_dim):
+#         super().__init__()
+#         self.regressor = nn.Sequential(
+#             nn.Conv2d(counter_dim, 196, 7, padding=3),
+#             nn.ReLU(),
+#             # Removed upsampling layer here, will be applied in forward()
+#             nn.Conv2d(196, 128, 5, padding=2),
+#             nn.ReLU(),
+#             # Removed upsampling layer here, will be applied in forward()
+#             nn.Conv2d(128, 64, 3, padding=1),
+#             nn.ReLU(),
+#             # Removed upsampling layer here, will be applied in forward()
+#             nn.Conv2d(64, 32, 1),
+#             nn.ReLU(),
+#             # Removed upsampling layer here, will be applied in forward()
+#             nn.Conv2d(32, 1, 1),
+#             nn.ReLU()
+#             # Final upsampling will be applied in forward()
+#         )
+        
+#     def forward(self, features):
+#         x = features
+#         for layer in self.regressor:
+#             if isinstance(layer, nn.Conv2d):
+#                 x = layer(x)
+#                 if layer.out_channels in [196, 128, 64, 32]:
+#                     # Apply interpolation here, before ReLU of the next layer
+#                     x = F.interpolate(x, scale_factor=2, mode='bilinear', align_corners=False)
+#             else:
+#                 x = layer(x)
+#         return x
+
 class BMNet(nn.Module):
     def __init__(self, backbone, EPF_extractor, refiner, matcher, counter, hidden_dim):
 

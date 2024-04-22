@@ -122,7 +122,7 @@ def load_dataset(dataset, seed):
     query_transform = ext_transforms.get_query_transforms(is_train=True, exemplar_size=(128, 128))
 
     whole_train_set = dataset(data_dir=args.dataset_dir,
-                            data_list=args.dataset_dir +'/test.txt',
+                            data_list=args.dataset_dir +'/whole.txt',
                             box_number=3,
                             scaling=1.0,
                             main_transform=main_transform,
@@ -270,7 +270,7 @@ def main(train_loader, cal_loader, test_loader, args):
             for img_interval in show_interval:
                 img_interval = img_interval.reshape(19, args.height, args.width).mean(axis=0)
                 img_name = os.path.basename(test_loader.dataset.dataset.train_data[test_loader.dataset.indices[img_idx]])
-                visualize(img_interval, height=args.height, width=args.width, save_dir=os.path.join(f'visualization/seed{seed}', img_name))
+                visualize(img_interval, height=args.height, width=args.width, save_dir=os.path.join(f'visualization/seed{seed}', 'fcp-' + img_name))
                 img_idx += 1
 
     test_intervals = np.concatenate(test_intervals, axis=0)
@@ -291,6 +291,22 @@ def main(train_loader, cal_loader, test_loader, args):
         all_y_test.append(y_test.cpu().numpy())
     test_intervals = np.concatenate(test_intervals, axis=0)
     all_y_test = np.concatenate(all_y_test, axis=0)
+
+    img_idx = 0
+    for x_test, patch_test , y_test in tqdm(test_loader):
+        intervals = icp2.predict((x_test,patch_test), significance=alpha)
+        test_intervals.append(intervals)
+        all_y_test.append(y_test.cpu().numpy())
+
+        # this is used for visualization
+        if args.visualize:
+            loglog_interval = np.exp(-np.exp(intervals))
+            show_interval = np.abs(loglog_interval[..., 1] - loglog_interval[..., 0])
+            for img_interval in show_interval:
+                img_interval = img_interval.reshape(19, args.height, args.width).mean(axis=0)
+                img_name = os.path.basename(test_loader.dataset.dataset.train_data[test_loader.dataset.indices[img_idx]])
+                visualize(img_interval, height=args.height, width=args.width, save_dir=os.path.join(f'visualization/seed{seed}', 'fcp-' + img_name))
+                img_idx += 1
 
     y_lower, y_upper = test_intervals[..., 0], test_intervals[..., 1]
     coverage_cp, length_cp = compute_coverage(all_y_test, y_lower, y_upper, alpha, "RegressorNc")
