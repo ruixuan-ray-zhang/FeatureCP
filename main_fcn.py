@@ -122,7 +122,7 @@ def load_dataset(dataset, seed):
     query_transform = ext_transforms.get_query_transforms(is_train=True, exemplar_size=(128, 128))
 
     whole_train_set = dataset(data_dir=args.dataset_dir,
-                            data_list=args.dataset_dir +'/whole.txt',
+                            data_list=args.dataset_dir +'/test.txt',
                             box_number=3,
                             scaling=1.0,
                             main_transform=main_transform,

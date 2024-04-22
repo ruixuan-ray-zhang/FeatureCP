@@ -132,7 +132,7 @@ class RegressorNc(BaseModelNc):
             norm = np.ones(n_test)
 
         if significance:
-            self.model.model.out_shape = x.shape[1] * x.shape[2]
+            self.model.model.out_shape = x.shape[2] * x.shape[3]
             intervals = np.zeros((x.shape[0], self.model.model.out_shape, 2))
             err_dist = self.err_func.apply_inverse(nc, significance)  # (2, y_dim)
             err_dist = np.stack([err_dist] * n_test)  # (B, 2, y_dim)
@@ -412,7 +412,7 @@ class FeatRegressorNc(BaseModelNc):
             norm = np.ones(n_test)
 
         if significance:
-            self.model.model.out_shape = x.shape[1] * x.shape[2]
+            self.model.model.out_shape = x.shape[2] * x.shape[3]
             intervals = np.zeros((x.shape[0], self.model.model.out_shape, 2))
             feat_err_dist = self.err_func.apply_inverse(nc, significance)
 
@@ -443,7 +443,7 @@ class FeatRegressorNc(BaseModelNc):
                     x = torch.from_numpy(x).to(self.model.device)
                 z = self.model.model.encoder(x).detach()
 
-                lirpa_model = BoundedModule(self.model.model.g, torch.empty_like(z))
+                lirpa_model = BoundedModule(self.model.model.counter, torch.empty_like(z))
                 ptb = PerturbationLpNorm(norm=self.feat_norm, eps=feat_err_dist[0][0])  # feat_err_dist=[[0.122, 0.122]]
                 my_input = BoundedTensor(z, ptb)
 
@@ -540,7 +540,7 @@ class IcpRegressor(BaseIcp):
 
         n_significance = (99 if significance is None
                           else np.array(significance).size)
-        self.nc_function.model.model.out_shape = x.shape[1] * x.shape[2]
+        self.nc_function.model.model.out_shape = x.shape[2] * x.shape[3]
         if n_significance > 1:
             prediction = np.zeros((x.shape[0], self.nc_function.model.model.out_shape, 2, n_significance))
         else:
