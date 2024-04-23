@@ -169,7 +169,7 @@ class FSC147(Dataset):
         self.image_classes = get_image_classes(image_classes_file)
         with open(annotation_file) as f:
             self.annotations = json.load(f)
-    
+
         # store images and generate ground truths
         self.images = {}
         self.targets = {}

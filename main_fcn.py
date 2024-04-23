@@ -8,7 +8,7 @@ from functools import partial
 import numpy as np
 import sys
 import yaml
-
+import pdb
 np.warnings.filterwarnings('ignore')
 
 import torch.utils.data as data
@@ -192,7 +192,7 @@ def load_dataset(dataset, seed):
     # print("Class weights:", class_weights)
 
     # return (train_loader, cal_loader, test_loader), class_weights, class_encoding
-    return (train_loader, cal_loader, test_loader)
+    return (train_loader, cal_loader, test_loader),(train_set, cal_set, test_set)
 
 def load_bmnet_model(args):
     cfg.merge_from_file(args.bmnet_cfg)
@@ -206,7 +206,7 @@ def load_loca_model(args):
     model = make_loca(config,device)
     return model
 
-def main(train_loader, cal_loader, test_loader, args):
+def main(train_loader, cal_loader, test_loader, test_set, args):
     dir = f"model_zoo/{args.model}"
     if 'FCN' in args.model:
         model = make_fcn(pretrained=True, img_shape=image_shape, num_classes=20)
@@ -219,12 +219,6 @@ def main(train_loader, cal_loader, test_loader, args):
         raise ValueError("does not find the checkpoint in {}".format(dir))
 
     print(f"==> Load model from {dir}")
-
-    # mean_estimator = helper.MSENet_RegressorAdapter(model=model, device=device, fit_params=None,
-    #                                                 in_shape=image_shape, out_shape=args.height*args.width*num_classes,
-    #                                                 hidden_size=args.hidden_size, learn_func=nn_learn_func, epochs=args.epochs,
-    #                                                 batch_size=args.batch_size, dropout=args.dropout, lr=args.lr, wd=args.wd,
-    #                                                 test_ratio=cv_test_ratio, random_state=cv_random_state, )
     
     mean_estimator = helper.MSENet_RegressorAdapter(model=model, device=device, fit_params=None,
                                                     hidden_size=args.hidden_size, learn_func=nn_learn_func, epochs=args.epochs,
@@ -240,9 +234,6 @@ def main(train_loader, cal_loader, test_loader, args):
     criterion = WeightedMSE(out_shape=None, weight=None)
 
     # FeatureCP
-    # nc = FeatRegressorNc(mean_estimator, criterion=criterion, inv_lr=args.feat_lr, inv_step=args.feat_step,
-    #                      feat_norm=args.feat_norm, certification_method=args.cert_method,
-    #                      g_out_process=partial(model.output_post_process, img_shape=image_shape))
     nc = FeatRegressorNc(mean_estimator, criterion=criterion, inv_lr=args.feat_lr, inv_step=args.feat_step,
                          feat_norm=args.feat_norm, certification_method=args.cert_method,
                          g_out_process=None)
@@ -251,76 +242,84 @@ def main(train_loader, cal_loader, test_loader, args):
 
     icp.calibrate_batch(cal_loader)
 
-    # # calculating the coverage of FCP
-    # in_coverage = icp.if_in_coverage_batch(test_loader, significance=alpha)
-    # coverage_fcp = np.sum(in_coverage) * 100 / len(in_coverage)
+    # calculating the coverage of FCP
+    in_coverage = icp.if_in_coverage_batch(test_loader, significance=alpha)
+    coverage_fcp = np.sum(in_coverage) * 100 / len(in_coverage)
 
-    # test_intervals = []
-    # all_y_test = []
-    # img_idx = 0
-    # for x_test, patch_test , y_test in tqdm(test_loader):
-    #     intervals = icp.predict((x_test,patch_test), significance=alpha)
-    #     test_intervals.append(intervals)
-    #     all_y_test.append(y_test.cpu().numpy())
+    test_intervals = []
+    all_y_test = []
+    img_idx = 0
+    for x_test, patch_test , y_test in tqdm(test_loader):
+        intervals = icp.predict((x_test,patch_test), significance=alpha)
+        test_intervals.append(intervals)
+        all_y_test.append(y_test.cpu().numpy())
 
-    #     # this is used for visualization
-    #     if args.visualize:
-    #         loglog_interval = np.exp(-np.exp(intervals))
-    #         show_interval = np.abs(loglog_interval[..., 1] - loglog_interval[..., 0])
-    #         for img_interval in show_interval:
-    #             img_interval = img_interval.reshape(19, args.height, args.width).mean(axis=0)
-    #             img_name = os.path.basename(test_loader.dataset.dataset.train_data[test_loader.dataset.indices[img_idx]])
-    #             visualize(img_interval, height=args.height, width=args.width, save_dir=os.path.join(f'visualization/seed{seed}', 'fcp-' + img_name))
-    #             img_idx += 1
+        # this is used for visualization
+        if args.visualize:
+            loglog_interval = np.exp(-np.exp(intervals))
+            show_interval = np.abs(loglog_interval[..., 1] - loglog_interval[..., 0])
+            for img_interval in show_interval:
+                img_interval = img_interval.reshape(19, args.height, args.width).mean(axis=0)
+                img_name = os.path.basename(test_loader.dataset.dataset.data_list[test_loader.dataset.indices[img_idx]])
+                visualize(img_interval, height=args.height, width=args.width, save_dir=os.path.join(f'visualization/seed{seed}', 'fcp-' + img_name))
+                img_idx += 1
 
-    # test_intervals = np.concatenate(test_intervals, axis=0)
-    # all_y_test = np.concatenate(all_y_test, axis=0)
-    # # estimating the length of FCP
-    # y_lower, y_upper = test_intervals[..., 0], test_intervals[..., 1]
-    # _, length_fcp = compute_coverage(all_y_test, y_lower, y_upper, alpha, "FeatRegressorNc")
+    test_intervals = np.concatenate(test_intervals, axis=0)
+    all_y_test = np.concatenate(all_y_test, axis=0)
+    # estimating the length of FCP
+    y_lower, y_upper = test_intervals[..., 0], test_intervals[..., 1]
+    _, length_fcp = compute_coverage(all_y_test, y_lower, y_upper, alpha, "FeatRegressorNc")
 
     # Vanilla CP
     icp2 = IcpRegressor(RegressorNc(mean_estimator))
     icp2.calibrate_batch(cal_loader)
 
-    test_intervals = []
+    cp_test_intervals = []
     all_y_test = []
-    img_idx = 0
 
     for x_test, patch_test, y_test in tqdm(test_loader):
         y_test = y_test['density_map']
         intervals = icp2.predict((x_test,patch_test), significance=alpha)
-        test_intervals.append(intervals)
+        cp_test_intervals.append(intervals)
         all_y_test.append(y_test.reshape(y_test.shape[0],-1).cpu().numpy())
 
-         # this is used for visualization
-        if args.visualize:
-            # loglog_interval = np.exp(-np.exp(intervals))
-            # show_interval = np.abs(loglog_interval[..., 1] - loglog_interval[..., 0])
-            show_interval = np.abs(intervals[..., 1] - intervals[..., 0])
-            for img_interval in show_interval:
-                img_interval = img_interval.reshape(19, args.height, args.width).mean(axis=0)
-                img_name = os.path.basename(test_loader.dataset.dataset.train_data[test_loader.dataset.indices[img_idx]])
-                visualize(img_interval, height=args.height, width=args.width, save_dir=os.path.join(f'visualization/seed{seed}', 'fcp-' + img_name))
-                img_idx += 1
-
-    # test_intervals = np.concatenate(test_intervals, axis=0)
-    # all_y_test = np.concatenate(all_y_test, axis=0)
-    # y_lower, y_upper = test_intervals[..., 0], test_intervals[..., 1]
     y_lower = []
     y_upper = []
-    for interval in test_intervals:
+    for interval in cp_test_intervals:
         lower = interval[..., 0]  # Extract the lower bounds (first element of last dimension)
         upper = interval[..., 1]  # Extract the upper bounds (second element of last dimension)
-        
         y_lower.append(lower)
         y_upper.append(upper)
-    y_lower = np.array(y_lower)
-    y_upper = np.array(y_upper)
-    print(y_lower.shape,y_upper.shape)
-    pdb.set_trace()
+
     coverage_cp, length_cp = compute_coverage(all_y_test, y_lower, y_upper, alpha, "RegressorNc")
-    return coverage_fcp, length_fcp, coverage_cp, length_cp
+
+    img_idx = 0
+    if args.visualize:
+        dataset = test_set
+        for batch_idx, sample in enumerate(test_loader):
+            img, patches, targets = sample
+            cp_intervals = cp_test_intervals[batch_idx]
+            # fcp_intervals = fcp_test_intervals[batch_idx]
+            batch_h, batch_w = img.shape[2], img.shape[3]
+            for i in range(img.shape[0]):
+                # read original image
+                # file_name = dataset.data_list[batch_idx][i][0]
+                # print(test_loader.dataset.dataset.data_list[test_loader.dataset.indices[img_idx]])
+                file_name = os.path.basename(test_loader.dataset.dataset.data_list[test_loader.dataset.indices[img_idx]][0])
+                file_path = image_path = args.dataset_dir + '/images_384_VarV2/' + file_name
+                origin_img = Image.open(file_path).convert("RGB")
+                origin_img = np.array(origin_img)
+                h, w, _ = origin_img.shape
+                cp_img_interval = cp_intervals[i][..., 0] - cp_intervals[i][..., 1]
+                cp_img_interval = cp_img_interval.reshape(1,1,batch_h,batch_w)
+
+                # pdb.set_trace()
+                cp_img_interval = torch.nn.functional.interpolate(torch.from_numpy(cp_img_interval), (h, w), mode='bilinear').squeeze(0).squeeze(0).cpu().numpy()
+                visualize(cp_img_interval, height=h, width=w, save_dir=os.path.join(f'visualization/seed{seed}', 'vanilla-' + file_name))
+                img_idx += 1
+
+
+    return 0, 0, coverage_cp, length_cp
 
 
 if __name__ == '__main__':
@@ -393,7 +392,7 @@ if __name__ == '__main__':
             raise RuntimeError("\"{0}\" is not a supported dataset.".format(
                 args.dataset))
         # (train_loader, cal_loader, test_loader), class_weights, class_encoding = load_dataset(dataset, seed)
-        (train_loader, cal_loader, test_loader) = load_dataset(dataset, seed)
+        (train_loader, cal_loader, test_loader),(train_set, cal_set, test_set) = load_dataset(dataset, seed)
 
         # remove the first dimension "unlabeled"
         # class_weights = class_weights[1:]
@@ -405,7 +404,7 @@ if __name__ == '__main__':
         print("Dataset: %s" % (args.data))
 
         coverage_fcp, length_fcp, coverage_cp, length_cp = \
-            main(train_loader, cal_loader, test_loader, args)
+            main(train_loader, cal_loader, test_loader, test_set, args)
         fcp_coverage_list.append(coverage_fcp)
         fcp_length_list.append(length_fcp)
         cp_coverage_list.append(coverage_cp)

@@ -73,8 +73,20 @@ def compute_coverage(y_test, y_lower, y_upper, significance, name="", verbose=Fa
     weighted_avg_length : float, weighted average length
     """
     if name == "RegressorNc":
-        pass
-    
+        coverage_list = []
+        avg_length_list = []
+        # Loop through each set of test, lower, and upper arrays
+        for y_t, y_l, y_u in zip(y_test, y_lower, y_upper):
+            # Ensuring y_test's shape aligns with y_lower and y_upper
+            if y_t.ndim == 1:
+                y_t = y_t[:, None]
+            # Calculate whether each element in y_test is within the corresponding interval in y_lower and y_upper
+            in_the_range = np.sum(np.all((y_t >= y_l) & (y_t <= y_u), axis=1))
+            coverage = in_the_range / y_t.size * 100  # Compute the coverage percentage
+            avg_length = np.mean(y_u - y_l)  # Compute the average interval length
+            coverage_list.append(coverage)
+            avg_length_list.append(avg_length)
+        
     elif name == "FeatRegressorNc":
         if y_test.ndim == 1 and y_lower.ndim == 2 and y_upper.ndim == 2:
             y_test = y_test[:, None]
@@ -82,7 +94,8 @@ def compute_coverage(y_test, y_lower, y_upper, significance, name="", verbose=Fa
         in_the_range = np.sum(np.all((y_test >= y_lower) & (y_test <= y_upper), axis=1))
         coverage = in_the_range / len(y_test) * 100
         avg_length = abs(np.mean(y_lower - y_upper))
-
+    else:
+        raise NotImplentError
     if verbose:
         print("%s: Percentage in the range (expecting %.2f): %f  " % (name, 100 - significance * 100, coverage),
               "Average length: %f" % (avg_length))
