@@ -1,5 +1,6 @@
 import torch
 from torch import nn
+import torch.nn.functional as F
 import torchvision
 from torchvision.models._utils import IntermediateLayerGetter
 
@@ -258,25 +259,30 @@ class DynamicSimilarityMatcher(nn.Module):
 class DensityX16(nn.Module):
     def __init__(self, counter_dim):
         super().__init__()
-        self.regressor =  nn.Sequential(
-                                    nn.Conv2d(counter_dim, 196, 7, padding=3),
-                                    nn.ReLU(),
-                                    nn.UpsamplingBilinear2d(scale_factor=2),
-                                    nn.Conv2d(196, 128, 5, padding=2),
-                                    nn.ReLU(),
-                                    nn.UpsamplingBilinear2d(scale_factor=2),
-                                    nn.Conv2d(128, 64, 3, padding=1),
-                                    nn.ReLU(),
-                                    nn.UpsamplingBilinear2d(scale_factor=2),
-                                    nn.Conv2d(64, 32, 1),
-                                    nn.ReLU(),
-                                    nn.UpsamplingBilinear2d(scale_factor=2),
-                                    nn.Conv2d(32, 1, 1),
-                                    nn.ReLU()
-                                )
+        self.conv1 = nn.Conv2d(counter_dim, 196, 7, padding=3)
+        self.conv2 = nn.Conv2d(196, 128, 5, padding=2)
+        self.conv3 = nn.Conv2d(128, 64, 3, padding=1)
+        self.conv4 = nn.Conv2d(64, 32, 1)
+        self.conv5 = nn.Conv2d(32, 1, 1)
         
     def forward(self, features):
-        return self.regressor(features)
+
+        x = self.conv1(features)
+        x = F.relu(x)
+        x = F.interpolate(x, scale_factor=2)
+        x = self.conv2(x)
+        x = F.relu(x)
+        x = F.interpolate(x, scale_factor=2)
+        x = self.conv3(x)
+        x = F.relu(x)
+        x = F.interpolate(x, scale_factor=2)
+        x = self.conv4(x)
+        x = F.relu(x)
+        x = F.interpolate(x, scale_factor=2)
+        x = self.conv5(x)
+        x = F.relu(x)
+
+        return x
     
 class BMNet(nn.Module):
     def __init__(self, backbone, EPF_extractor, refiner, matcher, counter, hidden_dim):
