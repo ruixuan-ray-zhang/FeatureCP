@@ -255,11 +255,14 @@ def main(train_loader, cal_loader, test_loader, args):
                 img_name = os.path.basename(test_loader.dataset.dataset.train_data[test_loader.dataset.indices[img_idx]])
                 visualize(img_interval, height=args.height, width=args.width, save_dir=os.path.join(f'visualization/seed{seed}', 'Vanilla-' + img_name))
                 img_idx += 1
-
     test_intervals = np.concatenate(test_intervals, axis=0)
+    print("test_intervals",test_intervals.shape)
     all_y_test = np.concatenate(all_y_test, axis=0)
+    print("all_y_test",all_y_test.shape)
 
     y_lower, y_upper = test_intervals[..., 0], test_intervals[..., 1]
+    print("y_lower",y_lower.shape)
+    pdb.set_trace()
     coverage_cp, length_cp = compute_coverage(all_y_test, y_lower, y_upper, alpha, "RegressorNc")
     return coverage_fcp, length_fcp, coverage_cp, length_cp
 
