@@ -103,12 +103,15 @@ class BaseModelNc(BaseScorer):
 
     def score_batch(self, dataloader):
         ret_val = []
-        for x, _, y in tqdm(dataloader):
-            prediction = self.model.predict(x)
+        for x, patches, y in tqdm(dataloader):
+            prediction = self.model.predict((x,patches))
+            y = y['density_map']
             if self.normalizer is not None:
                 norm = self.normalizer.score(x) + self.beta
             else:
                 norm = np.ones(len(x))
+            prediction = prediction.reshape(prediction.shape[0],-1)
+            y = y.reshape(y.shape[0],-1)
 
             if prediction.ndim > 1:
                 batch_ret_val = self.err_func.apply(prediction, y.detach().cpu().numpy())
@@ -124,8 +127,11 @@ class RegressorNc(BaseModelNc):
         super(RegressorNc, self).__init__(model, err_func, normalizer, beta)
 
     def predict(self, x, nc, significance=None):
+        patches = x[1] #patches
+        x = x[0] #image
+
         n_test = x.shape[0]
-        prediction = self.model.predict(x)
+        prediction = self.model.predict((x,patches))
         if self.normalizer is not None:
             norm = self.normalizer.score(x) + self.beta
         else:
@@ -137,13 +143,14 @@ class RegressorNc(BaseModelNc):
             err_dist = self.err_func.apply_inverse(nc, significance)  # (2, y_dim)
             err_dist = np.stack([err_dist] * n_test)  # (B, 2, y_dim)
             if prediction.ndim > 1:  # CQR
+                prediction = prediction.reshape(prediction.shape[0],-1)
                 intervals[..., 0] = prediction - err_dist[:, 0]
                 intervals[..., 1] = prediction + err_dist[:, 1]
             else:  # regular conformal prediction
                 err_dist *= norm[:, None, None]
                 intervals[..., 0] = prediction[:, None] - err_dist[:, 0]
                 intervals[..., 1] = prediction[:, None] + err_dist[:, 1]
-
+                
             return intervals
         else:  # Not tested for CQR
             significance = np.arange(0.01, 1.0, 0.01)

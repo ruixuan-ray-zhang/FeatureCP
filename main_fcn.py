@@ -251,33 +251,33 @@ def main(train_loader, cal_loader, test_loader, args):
 
     icp.calibrate_batch(cal_loader)
 
-    # calculating the coverage of FCP
-    in_coverage = icp.if_in_coverage_batch(test_loader, significance=alpha)
-    coverage_fcp = np.sum(in_coverage) * 100 / len(in_coverage)
+    # # calculating the coverage of FCP
+    # in_coverage = icp.if_in_coverage_batch(test_loader, significance=alpha)
+    # coverage_fcp = np.sum(in_coverage) * 100 / len(in_coverage)
 
-    test_intervals = []
-    all_y_test = []
-    img_idx = 0
-    for x_test, patch_test , y_test in tqdm(test_loader):
-        intervals = icp.predict((x_test,patch_test), significance=alpha)
-        test_intervals.append(intervals)
-        all_y_test.append(y_test.cpu().numpy())
+    # test_intervals = []
+    # all_y_test = []
+    # img_idx = 0
+    # for x_test, patch_test , y_test in tqdm(test_loader):
+    #     intervals = icp.predict((x_test,patch_test), significance=alpha)
+    #     test_intervals.append(intervals)
+    #     all_y_test.append(y_test.cpu().numpy())
 
-        # this is used for visualization
-        if args.visualize:
-            loglog_interval = np.exp(-np.exp(intervals))
-            show_interval = np.abs(loglog_interval[..., 1] - loglog_interval[..., 0])
-            for img_interval in show_interval:
-                img_interval = img_interval.reshape(19, args.height, args.width).mean(axis=0)
-                img_name = os.path.basename(test_loader.dataset.dataset.train_data[test_loader.dataset.indices[img_idx]])
-                visualize(img_interval, height=args.height, width=args.width, save_dir=os.path.join(f'visualization/seed{seed}', 'fcp-' + img_name))
-                img_idx += 1
+    #     # this is used for visualization
+    #     if args.visualize:
+    #         loglog_interval = np.exp(-np.exp(intervals))
+    #         show_interval = np.abs(loglog_interval[..., 1] - loglog_interval[..., 0])
+    #         for img_interval in show_interval:
+    #             img_interval = img_interval.reshape(19, args.height, args.width).mean(axis=0)
+    #             img_name = os.path.basename(test_loader.dataset.dataset.train_data[test_loader.dataset.indices[img_idx]])
+    #             visualize(img_interval, height=args.height, width=args.width, save_dir=os.path.join(f'visualization/seed{seed}', 'fcp-' + img_name))
+    #             img_idx += 1
 
-    test_intervals = np.concatenate(test_intervals, axis=0)
-    all_y_test = np.concatenate(all_y_test, axis=0)
-    # estimating the length of FCP
-    y_lower, y_upper = test_intervals[..., 0], test_intervals[..., 1]
-    _, length_fcp = compute_coverage(all_y_test, y_lower, y_upper, alpha, "FeatRegressorNc")
+    # test_intervals = np.concatenate(test_intervals, axis=0)
+    # all_y_test = np.concatenate(all_y_test, axis=0)
+    # # estimating the length of FCP
+    # y_lower, y_upper = test_intervals[..., 0], test_intervals[..., 1]
+    # _, length_fcp = compute_coverage(all_y_test, y_lower, y_upper, alpha, "FeatRegressorNc")
 
     # Vanilla CP
     icp2 = IcpRegressor(RegressorNc(mean_estimator))
@@ -285,30 +285,40 @@ def main(train_loader, cal_loader, test_loader, args):
 
     test_intervals = []
     all_y_test = []
-    for x_test, patch_test, y_test in tqdm(test_loader):
-        intervals = icp2.predict((x_test,patch_test), significance=alpha)
-        test_intervals.append(intervals)
-        all_y_test.append(y_test.cpu().numpy())
-    test_intervals = np.concatenate(test_intervals, axis=0)
-    all_y_test = np.concatenate(all_y_test, axis=0)
-
     img_idx = 0
-    for x_test, patch_test , y_test in tqdm(test_loader):
+
+    for x_test, patch_test, y_test in tqdm(test_loader):
+        y_test = y_test['density_map']
         intervals = icp2.predict((x_test,patch_test), significance=alpha)
         test_intervals.append(intervals)
-        all_y_test.append(y_test.cpu().numpy())
+        all_y_test.append(y_test.reshape(y_test.shape[0],-1).cpu().numpy())
 
-        # this is used for visualization
+         # this is used for visualization
         if args.visualize:
-            loglog_interval = np.exp(-np.exp(intervals))
-            show_interval = np.abs(loglog_interval[..., 1] - loglog_interval[..., 0])
+            # loglog_interval = np.exp(-np.exp(intervals))
+            # show_interval = np.abs(loglog_interval[..., 1] - loglog_interval[..., 0])
+            show_interval = np.abs(intervals[..., 1] - intervals[..., 0])
             for img_interval in show_interval:
                 img_interval = img_interval.reshape(19, args.height, args.width).mean(axis=0)
                 img_name = os.path.basename(test_loader.dataset.dataset.train_data[test_loader.dataset.indices[img_idx]])
                 visualize(img_interval, height=args.height, width=args.width, save_dir=os.path.join(f'visualization/seed{seed}', 'fcp-' + img_name))
                 img_idx += 1
 
-    y_lower, y_upper = test_intervals[..., 0], test_intervals[..., 1]
+    # test_intervals = np.concatenate(test_intervals, axis=0)
+    # all_y_test = np.concatenate(all_y_test, axis=0)
+    # y_lower, y_upper = test_intervals[..., 0], test_intervals[..., 1]
+    y_lower = []
+    y_upper = []
+    for interval in test_intervals:
+        lower = interval[..., 0]  # Extract the lower bounds (first element of last dimension)
+        upper = interval[..., 1]  # Extract the upper bounds (second element of last dimension)
+        
+        y_lower.append(lower)
+        y_upper.append(upper)
+    y_lower = np.array(y_lower)
+    y_upper = np.array(y_upper)
+    print(y_lower.shape,y_upper.shape)
+    pdb.set_trace()
     coverage_cp, length_cp = compute_coverage(all_y_test, y_lower, y_upper, alpha, "RegressorNc")
     return coverage_fcp, length_fcp, coverage_cp, length_cp
 

@@ -72,12 +72,16 @@ def compute_coverage(y_test, y_lower, y_upper, significance, name="", verbose=Fa
     avg_length : float, average length
     weighted_avg_length : float, weighted average length
     """
-    if y_test.ndim == 1 and y_lower.ndim == 2 and y_upper.ndim == 2:
-        y_test = y_test[:, None]
+    if name == "RegressorNc":
+        pass
+    
+    elif name == "FeatRegressorNc":
+        if y_test.ndim == 1 and y_lower.ndim == 2 and y_upper.ndim == 2:
+            y_test = y_test[:, None]
 
-    in_the_range = np.sum(np.all((y_test >= y_lower) & (y_test <= y_upper), axis=1))
-    coverage = in_the_range / len(y_test) * 100
-    avg_length = abs(np.mean(y_lower - y_upper))
+        in_the_range = np.sum(np.all((y_test >= y_lower) & (y_test <= y_upper), axis=1))
+        coverage = in_the_range / len(y_test) * 100
+        avg_length = abs(np.mean(y_lower - y_upper))
 
     if verbose:
         print("%s: Percentage in the range (expecting %.2f): %f  " % (name, 100 - significance * 100, coverage),

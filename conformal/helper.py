@@ -248,9 +248,6 @@ class LearnerOptimized:
         patches = x[1]
         x = x[0] # img
         if isinstance(x, torch.Tensor) and isinstance(patches['patches'], torch.Tensor):
-            print(x.type)
-            print(patches['patches'].type)
-            print(self.device)
             x = x.to(self.device).requires_grad_(False)
             patches['patches'] = patches['patches'].to(self.device).requires_grad_(False)
             patches['scale_embedding'] = patches['scale_embedding'].to(self.device).requires_grad_(False)
