@@ -1,5 +1,7 @@
 .DS_Store
 .idea
 ./visualization
-model_zoo/bmnet+/bmnet+_resnet_fsc147.pth
+model_zoo/bmnet/bmnet_resnet_fsc147.pth
+model_zoo/bmnet/bmnet_resnet_fsc147.pth
+
 model_zoo/loca/loca_few_shot.pt
