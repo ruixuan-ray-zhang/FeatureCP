@@ -2,3 +2,5 @@
 .idea
 ./visualization
 ./ckpt
+model_zoo/loca/loca_few_shot.pt
+./model_zoo
