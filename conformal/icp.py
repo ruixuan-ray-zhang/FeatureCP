@@ -442,7 +442,8 @@ class FeatRegressorNc(BaseModelNc):
                     lb = self.g_out_process(lb)
                     ub = self.g_out_process(ub)
                 lb, ub = lb.detach().cpu().numpy(), ub.detach().cpu().numpy()
-
+                lb = lb.reshape(lb.shape[0],-1)
+                ub = ub.reshape(ub.shape[0],-1)
                 intervals[..., 0] = lb
                 intervals[..., 1] = ub
             else:

@@ -1,12 +1,11 @@
 import torch
 from torch import nn
+import torch.nn.functional as F
 import torchvision
 from torchvision.models._utils import IntermediateLayerGetter
-import torch.nn.functional as F
-
+import os
 import copy 
 import sys
-import os
 
 """
    ************************************
@@ -260,59 +259,31 @@ class DynamicSimilarityMatcher(nn.Module):
 class DensityX16(nn.Module):
     def __init__(self, counter_dim):
         super().__init__()
-        self.regressor =  nn.Sequential(
-                                    nn.Conv2d(counter_dim, 196, 7, padding=3),
-                                    nn.ReLU(),
-                                    nn.UpsamplingBilinear2d(scale_factor=2),
-                                    nn.Conv2d(196, 128, 5, padding=2),
-                                    nn.ReLU(),
-                                    nn.UpsamplingBilinear2d(scale_factor=2),
-                                    nn.Conv2d(128, 64, 3, padding=1),
-                                    nn.ReLU(),
-                                    nn.UpsamplingBilinear2d(scale_factor=2),
-                                    nn.Conv2d(64, 32, 1),
-                                    nn.ReLU(),
-                                    nn.UpsamplingBilinear2d(scale_factor=2),
-                                    nn.Conv2d(32, 1, 1),
-                                    nn.ReLU()
-                                )
+        self.conv1 = nn.Conv2d(counter_dim, 196, 7, padding=3)
+        self.conv2 = nn.Conv2d(196, 128, 5, padding=2)
+        self.conv3 = nn.Conv2d(128, 64, 3, padding=1)
+        self.conv4 = nn.Conv2d(64, 32, 1)
+        self.conv5 = nn.Conv2d(32, 1, 1)
         
     def forward(self, features):
-        return self.regressor(features)
 
-# class DensityX16(nn.Module):
-#     def __init__(self, counter_dim):
-#         super().__init__()
-#         self.regressor = nn.Sequential(
-#             nn.Conv2d(counter_dim, 196, 7, padding=3),
-#             nn.ReLU(),
-#             # Removed upsampling layer here, will be applied in forward()
-#             nn.Conv2d(196, 128, 5, padding=2),
-#             nn.ReLU(),
-#             # Removed upsampling layer here, will be applied in forward()
-#             nn.Conv2d(128, 64, 3, padding=1),
-#             nn.ReLU(),
-#             # Removed upsampling layer here, will be applied in forward()
-#             nn.Conv2d(64, 32, 1),
-#             nn.ReLU(),
-#             # Removed upsampling layer here, will be applied in forward()
-#             nn.Conv2d(32, 1, 1),
-#             nn.ReLU()
-#             # Final upsampling will be applied in forward()
-#         )
-        
-#     def forward(self, features):
-#         x = features
-#         for layer in self.regressor:
-#             if isinstance(layer, nn.Conv2d):
-#                 x = layer(x)
-#                 if layer.out_channels in [196, 128, 64, 32]:
-#                     # Apply interpolation here, before ReLU of the next layer
-#                     x = F.interpolate(x, scale_factor=2, mode='bilinear', align_corners=False)
-#             else:
-#                 x = layer(x)
-#         return x
+        x = self.conv1(features)
+        x = F.relu(x)
+        x = F.interpolate(x, scale_factor=2)
+        x = self.conv2(x)
+        x = F.relu(x)
+        x = F.interpolate(x, scale_factor=2)
+        x = self.conv3(x)
+        x = F.relu(x)
+        x = F.interpolate(x, scale_factor=2)
+        x = self.conv4(x)
+        x = F.relu(x)
+        x = F.interpolate(x, scale_factor=2)
+        x = self.conv5(x)
+        x = F.relu(x)
 
+        return x
+    
 class BMNet(nn.Module):
     def __init__(self, backbone, EPF_extractor, refiner, matcher, counter, hidden_dim):
 
@@ -397,6 +368,7 @@ def make_bmnet(cfg,device):
     current_path = os.path.dirname(os.path.abspath(__file__))
     parent_path = os.path.dirname(current_path)
     sys.path.append(parent_path)
+
     if os.path.isfile(cfg.VAL.resume):
             checkpoint = torch.load(cfg.VAL.resume, map_location=device)
             model.load_state_dict(checkpoint['model'])
@@ -405,24 +377,31 @@ def make_bmnet(cfg,device):
 
     return model
 
-
 if __name__ == '__main__':
     import os
     import argparse
     from config import cfg
 
-    parser = argparse.ArgumentParser(
-        description="BMNet+"
-    )
-    parser.add_argument(
-        "--cfg",
-        default="config/bmnet+_fsc147.yaml",
-        metavar="FILE",
-        help="path to config file",
-        type=str,
-    )
-    args = parser.parse_args()
-    cfg.merge_from_file(args.cfg)
-    cfg.VAL.resume = "bmnet+_resnet_fsc147.pth"
+    # parser = argparse.ArgumentParser(
+    #     description="BMNet+"
+    # )
+    # parser.add_argument(
+    #     "--cfg",
+    #     default="config/bmnet+_fsc147.yaml",
+    #     metavar="FILE",
+    #     help="path to config file",
+    #     type=str,
+    # )
+    # args = parser.parse_args()
+    # cfg.merge_from_file(args.cfg)
+    # cfg.VAL.resume = "bmnet+_resnet_fsc147.pth"
 
-    model = make_bmnet(cfg)
+    # model = make_bmnet(cfg)
+    from torch.nn import functional as F
+    from auto_LiRPA import BoundedModule, BoundedTensor, PerturbationLpNorm
+    import numpy as np
+    z = torch.rand(20,257,32,32)
+    g = DensityX16(257)
+    lirpa_model = BoundedModule(g, torch.empty_like(z))
+    ptb = PerturbationLpNorm(norm=np.inf, eps=0.05)
+    my_input = BoundedTensor(z, ptb)

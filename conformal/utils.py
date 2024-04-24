@@ -72,7 +72,7 @@ def compute_coverage(y_test, y_lower, y_upper, significance, name="", verbose=Fa
     avg_length : float, average length
     weighted_avg_length : float, weighted average length
     """
-    if name == "RegressorNc":
+    if name == "RegressorNc" or name == "FeatRegressorNc":
         coverage_list = []
         avg_length_list = []
         # Loop through each set of test, lower, and upper arrays
@@ -87,13 +87,13 @@ def compute_coverage(y_test, y_lower, y_upper, significance, name="", verbose=Fa
             coverage_list.append(coverage)
             avg_length_list.append(avg_length)
         
-    elif name == "FeatRegressorNc":
-        if y_test.ndim == 1 and y_lower.ndim == 2 and y_upper.ndim == 2:
-            y_test = y_test[:, None]
+    # elif name == "FeatRegressorNc":
+    #     if y_test.ndim == 1 and y_lower.ndim == 2 and y_upper.ndim == 2:
+    #         y_test = y_test[:, None]
 
-        in_the_range = np.sum(np.all((y_test >= y_lower) & (y_test <= y_upper), axis=1))
-        coverage = in_the_range / len(y_test) * 100
-        avg_length = abs(np.mean(y_lower - y_upper))
+    #     in_the_range = np.sum(np.all((y_test >= y_lower) & (y_test <= y_upper), axis=1))
+    #     coverage = in_the_range / len(y_test) * 100
+    #     avg_length = abs(np.mean(y_lower - y_upper))
     else:
         raise NotImplentError
     if verbose:
