@@ -116,6 +116,16 @@ def make_mcnn():
 
 if __name__ == "__main__":
     model = make_mcnn()
+
+    import h5py
+    import numpy as np
+    fname = 'mcnn_shtechB_1356_ruixuan(mae19.1_mse32.8).h5'
+    h5f = h5py.File(fname, mode='r')
+    for k, v in model.state_dict().items():        
+        param = torch.from_numpy(np.asarray(h5f[k]))         
+        v.copy_(param)
+
     for name, param in model.named_parameters():
         if param.requires_grad:
             print(name, param.data)
+
