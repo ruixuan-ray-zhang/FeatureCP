@@ -411,7 +411,8 @@ class FeatRegressorNc(BaseModelNc):
             self.model.model.out_shape = x.shape[2] * x.shape[3] // 16
             intervals = np.zeros((x.shape[0], self.model.model.out_shape, 2))
             feat_err_dist = self.err_func.apply_inverse(nc, significance)
-
+            print("feat_err_dist",feat_err_dist)
+            pdb.set_trace()
             if prediction.ndim > 1:
                 if isinstance(x, torch.Tensor):
                     x = x.to(self.model.device)

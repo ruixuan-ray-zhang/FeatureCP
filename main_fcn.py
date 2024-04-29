@@ -241,6 +241,8 @@ def main(train_loader, cal_loader, test_loader, test_set, args):
     img_idx = 0
     for x_test , y_test in tqdm(test_loader):
         intervals = icp.predict(x_test, significance=alpha)
+        print("intervals",intervals)
+        # pdb.set_trace()
         fcp_test_intervals.append(intervals)
         all_y_test.append(y_test.reshape(y_test.shape[0],-1).cpu().numpy())
 
