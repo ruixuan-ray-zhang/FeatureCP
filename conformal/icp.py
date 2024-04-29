@@ -103,9 +103,8 @@ class BaseModelNc(BaseScorer):
 
     def score_batch(self, dataloader):
         ret_val = []
-        for x, patches, y in tqdm(dataloader):
-            prediction = self.model.predict((x,patches))
-            y = y['density_map']
+        for x, y in tqdm(dataloader):
+            prediction = self.model.predict(x)
             if self.normalizer is not None:
                 norm = self.normalizer.score(x) + self.beta
             else:
@@ -127,18 +126,15 @@ class RegressorNc(BaseModelNc):
         super(RegressorNc, self).__init__(model, err_func, normalizer, beta)
 
     def predict(self, x, nc, significance=None):
-        patches = x[1] #patches
-        x = x[0] #image
-
         n_test = x.shape[0]
-        prediction = self.model.predict((x,patches))
+        prediction = self.model.predict(x)
         if self.normalizer is not None:
             norm = self.normalizer.score(x) + self.beta
         else:
             norm = np.ones(n_test)
 
         if significance:
-            self.model.model.out_shape = x.shape[2] * x.shape[3]
+            self.model.model.out_shape = x.shape[2] * x.shape[3] // 16
             intervals = np.zeros((x.shape[0], self.model.model.out_shape, 2))
             err_dist = self.err_func.apply_inverse(nc, significance)  # (2, y_dim)
             err_dist = np.stack([err_dist] * n_test)  # (B, 2, y_dim)
@@ -221,7 +217,7 @@ class FeatRegressorNc(BaseModelNc):
         self.model.model.eval()
         each_step_z = []
         for _ in range(step):
-            pred = self.model.model.g(z)
+            pred = self.model.model.DME.g(z)
             if self.g_out_process is not None:
                 pred = self.g_out_process(pred)
 
@@ -328,10 +324,9 @@ class FeatRegressorNc(BaseModelNc):
         accumulate_val_coverage = np.zeros(max_inv_steps)
         accumulate_val_num = 0
         print("begin to find the best step number")
-        for x, _, y in tqdm(dataloader):
-            y = y['density_map']
+        for x, y in tqdm(dataloader):
             x, y = x.to(self.model.device), y.to(self.model.device)
-            z_pred = self.model.model.encoder(x)
+            z_pred = self.model.model.DME.encoder(x)
             # batch_each_step_val_coverage, val_num = self.coverage_loose(x, y, z_pred, steps=max_inv_steps, val_significance=val_significance)  # length: max_inv_steps
             batch_each_step_val_coverage, val_num = self.coverage_tight(x, y, z_pred, steps=max_inv_steps, val_significance=val_significance)  # length: max_inv_steps
             accumulate_val_coverage += np.array(batch_each_step_val_coverage) * val_num
@@ -362,7 +357,7 @@ class FeatRegressorNc(BaseModelNc):
         self.model.model.eval()
         n_test = x.shape[0]
         x, y = torch.from_numpy(x).to(self.model.device), torch.from_numpy(y).to(self.model.device)
-        z_pred = self.model.model.encoder(x)
+        z_pred = self.model.model.DME.encoder(x)
 
         if self.inv_step is None:
             self.inv_step = self.find_best_step_num(x, y, z_pred)
@@ -385,10 +380,7 @@ class FeatRegressorNc(BaseModelNc):
 
         print('calculating score:')
         ret_val = []
-        for x, patches, y in tqdm(dataloader):
-            y = y['density_map']
-            patches['scale_embedding'] = patches['scale_embedding'].to(self.model.device)
-            patches['patches'] = patches['patches'].to(self.model.device)
+        for x, y in tqdm(dataloader):
             x, y = x.to(self.model.device), y.to(self.model.device)
 
             if self.normalizer is not None:
@@ -396,7 +388,7 @@ class FeatRegressorNc(BaseModelNc):
             else:
                 norm = np.ones(len(x))
 
-            z_pred = self.model.model.encoder(x, patches, is_train=False)
+            z_pred = self.model.model.DME.encoder(x)
             z_true = self.inv_g(z_pred, y, step=self.inv_step)
             z_pred = z_pred.reshape(z_pred.shape[0],-1)
             z_true = z_true.reshape(z_true.shape[0],-1)
@@ -407,11 +399,8 @@ class FeatRegressorNc(BaseModelNc):
         return ret_val
 
     def predict(self, x, nc, significance=None):
-        patches = x[1] #patch
-        x = x[0] #img
-
         n_test = x.shape[0]
-        prediction = self.model.predict((x,patches))
+        prediction = self.model.predict(x)
 
         if self.normalizer is not None:
             norm = self.normalizer.score(x) + self.beta
@@ -419,7 +408,7 @@ class FeatRegressorNc(BaseModelNc):
             norm = np.ones(n_test)
 
         if significance:
-            self.model.model.out_shape = x.shape[2] * x.shape[3]
+            self.model.model.out_shape = x.shape[2] * x.shape[3] // 16
             intervals = np.zeros((x.shape[0], self.model.model.out_shape, 2))
             feat_err_dist = self.err_func.apply_inverse(nc, significance)
 
@@ -428,9 +417,9 @@ class FeatRegressorNc(BaseModelNc):
                     x = x.to(self.model.device)
                 else:
                     x = torch.from_numpy(x).to(self.model.device)
-                z = self.model.model.encoder(x,patches,is_train=False).detach()
+                z = self.model.model.DME.encoder(x).detach()
 
-                lirpa_model = BoundedModule(self.model.model.counter, torch.empty_like(z))
+                lirpa_model = BoundedModule(self.model.model.DME.g, torch.empty_like(z))
                 ptb = PerturbationLpNorm(norm=self.feat_norm, eps=feat_err_dist[0][0])
                 my_input = BoundedTensor(z, ptb)
 
@@ -449,9 +438,9 @@ class FeatRegressorNc(BaseModelNc):
             else:
                 if not isinstance(x, torch.Tensor):
                     x = torch.from_numpy(x).to(self.model.device)
-                z = self.model.model.encoder(x).detach()
+                z = self.model.model.DME.encoder(x).detach()
 
-                lirpa_model = BoundedModule(self.model.model.counter, torch.empty_like(z))
+                lirpa_model = BoundedModule(self.model.model.DME.g, torch.empty_like(z))
                 ptb = PerturbationLpNorm(norm=self.feat_norm, eps=feat_err_dist[0][0])  # feat_err_dist=[[0.122, 0.122]]
                 my_input = BoundedTensor(z, ptb)
 
@@ -542,13 +531,11 @@ class IcpRegressor(BaseIcp):
         super(IcpRegressor, self).__init__(nc_function, condition)
 
     def predict(self, x, significance=None):
-        patches = x[1]
-        x = x[0]
         self.nc_function.model.model.eval()
 
         n_significance = (99 if significance is None
                           else np.array(significance).size)
-        self.nc_function.model.model.out_shape = x.shape[2] * x.shape[3]
+        self.nc_function.model.model.out_shape = x.shape[2] * x.shape[3] // 16
         if n_significance > 1:
             prediction = np.zeros((x.shape[0], self.nc_function.model.model.out_shape, 2, n_significance))
         else:
@@ -561,8 +548,7 @@ class IcpRegressor(BaseIcp):
             idx = condition_map == condition
             if np.sum(idx) > 0:
                 x_idx = x[idx, :]
-                patches_idx = {'patches': patches['patches'][idx, :], 'scale_embedding': patches['scale_embedding'][idx, :]}
-                p = self.nc_function.predict((x_idx,patches_idx), self.cal_scores[condition], significance)
+                p = self.nc_function.predict(x_idx, self.cal_scores[condition], significance)
 
                 if n_significance > 1:
                     prediction[idx, :, :] = p

@@ -32,9 +32,8 @@ from conformal.utils import compute_coverage, WeightedMSE, seed_torch
 from datasets.FSC147 import batch_collate_fn
 
 from model_zoo.bmnet.bmnet_model import make_bmnet
-from model_zoo.loca.loca_model import make_loca, configure_loca_parser, AttrDict
 from model_zoo.bmnet.config import cfg
-
+from model_zoo.mcnn.mcnn_model import make_mcnn
 
 torch.backends.cuda.matmul.allow_tf32 = False
 torch.backends.cudnn.allow_tf32 = False
@@ -102,9 +101,8 @@ def load_dataset(dataset, seed):
     print("Selected dataset:", args.data)
     print("Dataset directory:", args.dataset_dir)
 
-    # image_transform = transforms.Compose(
-    #     [transforms.Resize((args.height, args.width)),
-    #      transforms.ToTensor()])
+    image_transform = transforms.Compose(
+        [transforms.ToTensor()])
 
     # label_transform = transforms.Compose([
     #     transforms.Resize((args.height, args.width), Image.NEAREST),
@@ -112,27 +110,18 @@ def load_dataset(dataset, seed):
     #     ext_transforms.ToOnehotGaussianBlur(kernel_size=7, num_classes=dataset.num_classes)
     # ])
 
-    # whole_train_set = dataset(
-    #     data_dir = args.dataset_dir,
-    #     transform=ext_transforms.MainTransform(),
-    #     label_transform=None)
 
-    main_transform = ext_transforms.MainTransform()
-    query_transform = ext_transforms.get_query_transforms(is_train=True, exemplar_size=(128, 128))
-
-    whole_train_set = dataset(data_dir=args.dataset_dir,
-                            data_list=args.dataset_dir +'/whole.txt',
-                            box_number=3,
-                            scaling=1.0,
-                            main_transform=main_transform,
-                            query_transform=query_transform)
+    whole_train_set = dataset(
+        args.dataset_dir,
+        transform=image_transform,
+        label_transform=None)
     
 
     if args.data_seed is None:
         cal_test_generator = torch.Generator().manual_seed(seed)
     else:
-        cal_test_generator = torch.Generator().manual_seed(args.data_seed) #6135
-    train_set, val_set, cal_set, test_set = random_split(whole_train_set, [4800, 200, 400, len(whole_train_set) - 5400],
+        cal_test_generator = torch.Generator().manual_seed(args.data_seed) #316
+    train_set, val_set, cal_set, test_set = random_split(whole_train_set, [1, 1, 100, len(whole_train_set) - 102],
                                                          generator=torch.Generator().manual_seed(0),
                                                          cal_test_generator=cal_test_generator)
 
@@ -141,16 +130,13 @@ def load_dataset(dataset, seed):
         batch_size=args.batch_size,
         shuffle=True,
         num_workers=args.workers,
-        pin_memory=True,
-        collate_fn=batch_collate_fn
-        )
+        pin_memory=True)
     cal_loader = data.DataLoader(
         cal_set,
         batch_size=args.batch_size,
         shuffle=False,
         num_workers=args.workers,
-        pin_memory=True,
-        collate_fn=batch_collate_fn
+        pin_memory=True
     )
 
     test_loader = data.DataLoader(
@@ -158,8 +144,8 @@ def load_dataset(dataset, seed):
         batch_size=args.batch_size,
         shuffle=False,
         num_workers=args.workers,
-        pin_memory=True,
-        collate_fn=batch_collate_fn)
+        pin_memory=True)
+
 
     # Get encoding between pixel valus in label images and RGB colors
     # class_encoding = whole_train_set.color_encoding
@@ -174,7 +160,7 @@ def load_dataset(dataset, seed):
     print("test dataset size:", len(test_set))
 
     # Get a batch of samples to display
-    images, _, _ = iter(train_loader).next()
+    images, _= iter(train_loader).next()
     print("Image size:", images.size())
     # print("Label size:", labels.size())
     # print("Class-color encoding:", class_encoding)
@@ -199,21 +185,26 @@ def load_bmnet_model(args):
     model = make_bmnet(cfg,device)
     return model
 
-def load_loca_model(args):
-    with open(args.loca_cfg, 'r') as file:
-        config = yaml.safe_load(file)
-    model = make_loca(config,device)
+def load_mcnn_model(args):
+    model = make_mcnn(device)
+    import h5py
+    import numpy as np
+    fname = "/home/vaecount/kevinyao/project/FeatureCP/model_zoo/mcnn/mcnn_shtechB.h5"
+    h5f = h5py.File(fname, mode='r')
+    for k, v in model.state_dict().items():        
+        param = torch.from_numpy(np.asarray(h5f[k]))         
+        v.copy_(param)
     return model
 
 def main(train_loader, cal_loader, test_loader, test_set, args):
     dir = f"model_zoo/{args.model}"
-    if 'FCN' in args.model:
-        model = make_fcn(pretrained=True, img_shape=image_shape, num_classes=20)
-        model.load_state_dict(torch.load(os.path.join(dir, "model.pt"), map_location=device)['state_dict'])
-    elif 'bmnet' in args.model:
+    # if 'FCN' in args.model:
+    #     model = make_fcn(pretrained=True, img_shape=image_shape, num_classes=20)
+    #     model.load_state_dict(torch.load(os.path.join(dir, "model.pt"), map_location=device)['state_dict'])
+    if 'bmnet' in args.model:
         model = load_bmnet_model(args)
-    elif 'loca' in args.model:
-        model = load_loca_model(args)
+    elif 'mcnn' in args.model:
+        model = load_mcnn_model(args)
     else:
         raise ValueError("does not find the checkpoint in {}".format(dir))
 
@@ -248,21 +239,16 @@ def main(train_loader, cal_loader, test_loader, test_set, args):
     fcp_test_intervals = []
     all_y_test = []
     img_idx = 0
-    for x_test, patch_test , y_test in tqdm(test_loader):
-        y_test = y_test['density_map']
-        intervals = icp.predict((x_test,patch_test), significance=alpha)
+    for x_test , y_test in tqdm(test_loader):
+        intervals = icp.predict(x_test, significance=alpha)
         fcp_test_intervals.append(intervals)
         all_y_test.append(y_test.reshape(y_test.shape[0],-1).cpu().numpy())
 
-    y_lower = []
-    y_upper = []
-    for interval in fcp_test_intervals:
-        lower = interval[..., 0]  # Extract the lower bounds (first element of last dimension)
-        upper = interval[..., 1]  # Extract the upper bounds (second element of last dimension)
-        y_lower.append(lower)
-        y_upper.append(upper)
-
-    _, length_fcp = compute_coverage(all_y_test, y_lower, y_upper, alpha, "FeatRegressorNc")
+    fcp_test_intervals = np.concatenate(fcp_test_intervals, axis=0)
+    all_y_test = np.concatenate(all_y_test, axis=0)
+    # estimating the length of FCP
+    y_lower, y_upper = fcp_test_intervals[..., 0], fcp_test_intervals[..., 1]
+    _, length_fcp = compute_coverage(all_y_test, y_lower, y_upper, alpha, "tensor-FeatRegressorNc")
 
     # Vanilla CP
     icp2 = IcpRegressor(RegressorNc(mean_estimator))
@@ -271,62 +257,54 @@ def main(train_loader, cal_loader, test_loader, test_set, args):
     cp_test_intervals = []
     all_y_test = []
 
-    for x_test, patch_test, y_test in tqdm(test_loader):
-        y_test = y_test['density_map']
-        intervals = icp2.predict((x_test,patch_test), significance=alpha)
+    for x_test, y_test in tqdm(test_loader):
+        intervals = icp2.predict(x_test, significance=alpha)
         cp_test_intervals.append(intervals)
         all_y_test.append(y_test.reshape(y_test.shape[0],-1).cpu().numpy())
 
-    y_lower = []
-    y_upper = []
-    for interval in cp_test_intervals:
-        lower = interval[..., 0]  # Extract the lower bounds (first element of last dimension)
-        upper = interval[..., 1]  # Extract the upper bounds (second element of last dimension)
-        y_lower.append(lower)
-        y_upper.append(upper)
+    cp_test_intervals = np.concatenate(cp_test_intervals, axis=0)
+    all_y_test = np.concatenate(all_y_test, axis=0)
 
-    coverage_cp, length_cp = compute_coverage(all_y_test, y_lower, y_upper, alpha, "RegressorNc")
+    y_lower, y_upper = cp_test_intervals[..., 0], cp_test_intervals[..., 1]
+    coverage_cp, length_cp = compute_coverage(all_y_test, y_lower, y_upper, alpha, "tensor-RegressorNc")
 
     img_idx = 0
     if args.visualize:
         dataset = test_set
         for batch_idx, sample in enumerate(test_loader):
-            img, patches, targets = sample
-            cp_intervals = cp_test_intervals[batch_idx]
-            fcp_intervals = fcp_test_intervals[batch_idx]
-            batch_h, batch_w = img.shape[2], img.shape[3]
+            img, den = sample
+            cp_intervals = cp_test_intervals[batch_idx:batch_idx+1,:]
+            fcp_intervals = fcp_test_intervals[batch_idx:batch_idx+1,:]
+            batch_h, batch_w = den.shape[2], den.shape[3]
             for i in range(img.shape[0]):
                 # read original image
                 # file_name = dataset.data_list[batch_idx][i][0]
                 # print(test_loader.dataset.dataset.data_list[test_loader.dataset.indices[img_idx]])
-                file_name = os.path.basename(test_loader.dataset.dataset.data_list[test_loader.dataset.indices[img_idx]][0])
-                file_path = image_path = args.dataset_dir + '/images_384_VarV2/' + file_name
-                origin_img = Image.open(file_path).convert("RGB")
-                origin_img = np.array(origin_img)
-                h, w, _ = origin_img.shape
+                file_name = os.path.basename(test_loader.dataset.dataset.train_data[test_loader.dataset.indices[img_idx]][0])
+                file_path = image_path = args.dataset_dir + '/test_data/images/' + file_name
+                # origin_img = Image.open(file_path).convert("RGB")
+                # origin_img = np.array(origin_img)
+                # h, w, _ = origin_img.shape
 
                 cp_img_interval = cp_intervals[i][..., 0] - cp_intervals[i][..., 1]
-                cp_img_interval = cp_img_interval.reshape(1,1,batch_h,batch_w)
-                cp_img_interval = torch.nn.functional.interpolate(torch.from_numpy(cp_img_interval), (h, w), mode='bilinear').squeeze(0).squeeze(0).cpu().numpy()
-                visualize(cp_img_interval, height=h, width=w, save_dir=os.path.join(f'visualization/seed{seed}', 'vanilla-' + file_name))
+                cp_img_interval = cp_img_interval.reshape(batch_h,batch_w)
+                visualize(cp_img_interval, height=batch_h, width=batch_w, save_dir=os.path.join(f'visualization/seed{seed}', 'vanilla-' + str(img_idx)))
 
                 fcp_img_interval = fcp_intervals[i][..., 0] - fcp_intervals[i][..., 1]
-                fcp_img_interval = fcp_img_interval.reshape(1,1,batch_h,batch_w)
-                fcp_img_interval = torch.nn.functional.interpolate(torch.from_numpy(fcp_img_interval), (h, w), mode='bilinear').squeeze(0).squeeze(0).cpu().numpy()
-                visualize(fcp_img_interval, height=h, width=w, save_dir=os.path.join(f'visualization/seed{seed}', 'fcp-' + file_name))
+                fcp_img_interval = fcp_img_interval.reshape(batch_h,batch_w)
+                visualize(fcp_img_interval, height=batch_h, width=batch_w, save_dir=os.path.join(f'visualization/seed{seed}', 'fcp-' + str(img_idx)))
                 img_idx += 1
 
 
-    return coverage_cp, length_fcp, coverage_cp, length_cp
+    return coverage_fcp, length_fcp, coverage_cp, length_cp
 
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
-    # subparsers = parser.add_subparsers(title="commands", dest="command")
 
     parser.add_argument("--device", "--d", default=-1, type=int)
     parser.add_argument('--seed', type=int, nargs='+', default=[0])
-    parser.add_argument("--data", type=str, default="cityscapes", help="only support FSC147 now", choices=['FSC147'])
+    parser.add_argument("--data", type=str, default="cityscapes", help="only support FSC147 now", choices=['FSC147','shanghaitech'])
     parser.add_argument("--data-seed", type=int, default=None, help="the random seed to split the calibration and test sets")
     parser.add_argument("--dataset-dir", type=str, default=None,
                         help="Path to the root directory of the selected dataset.")
@@ -352,11 +330,9 @@ if __name__ == '__main__':
     parser.add_argument("--cert_method", "--cm", type=int, default=0, choices=[0, 1, 2, 3])
 
     parser.add_argument("--visualize", action="store_true", default=False, help="visualize the length in the image")
-    parser.add_argument("--model", type=str, default="bmnet", help="only support bmnet, loca now", choices=['loca','bmnet'])
+    parser.add_argument("--model", type=str, default="bmnet", help="only support bmnet, mcnn now", choices=['mcnn','bmnet'])
     parser.add_argument("--bmnet_cfg", type=str, default="model_zoo/bmnet/config/bmnet_fsc147.yaml", help="Path to config file for bmnet")
-    parser.add_argument("--loca_cfg", type=str, default="model_zoo/loca/config/loca.yaml", help="Path to config file for loca")
-    # loca_parser = subparsers.add_parser("loca", help="LOCA command")
-    # configure_loca_parser(loca_parser)
+
 
     args = parser.parse_args()
 
@@ -385,6 +361,8 @@ if __name__ == '__main__':
             from datasets.cityscapes import Cityscapes as dataset
         elif args.data == 'FSC147':
             from datasets.FSC147 import FSC147 as dataset
+        elif args.data == "shanghaitech":
+            from datasets.shanghaitech import Shanghaitech as dataset
         else:
             # Should never happen...but just in case it does
             raise RuntimeError("\"{0}\" is not a supported dataset.".format(

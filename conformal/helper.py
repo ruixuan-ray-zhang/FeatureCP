@@ -244,17 +244,11 @@ class LearnerOptimized:
 
     def predict(self, x):
         self.model.eval()
-        patches = x[1]
-        x = x[0] # img
-        if isinstance(x, torch.Tensor) and isinstance(patches['patches'], torch.Tensor):
+        if isinstance(x, torch.Tensor):
             x = x.to(self.device).requires_grad_(False)
-            patches['patches'] = patches['patches'].to(self.device).requires_grad_(False)
-            patches['scale_embedding'] = patches['scale_embedding'].to(self.device).requires_grad_(False)
         else:
             x = torch.from_numpy(x).to(self.device).requires_grad_(False)
-            patches['patches'] = torch.from_numpy(patches['patches']).to(self.device).requires_grad_(False)
-            patches['scale_embedding'] = torch.from_numpy(patches['scale_embedding']).to(self.device).requires_grad_(False)
-        ret_val = self.model(x,patches,is_train=False).cpu().detach().numpy()
+        ret_val = self.model(x).cpu().detach().numpy()
         return ret_val
 
 

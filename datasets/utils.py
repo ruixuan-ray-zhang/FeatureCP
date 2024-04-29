@@ -1,7 +1,8 @@
 import os
 from PIL import Image
 import numpy as np
-
+from scipy.ndimage import gaussian_filter
+import pandas as pd
 
 def get_files(folder, name_filter=None, extension_filter=None):
     """Helper function that returns the list of files in a specified folder
@@ -61,9 +62,11 @@ def pil_loader(data_path, label_path):
 
     """
     data = Image.open(data_path)
-    label = Image.open(label_path)
-
-    return data, label
+    data = data.convert("L")
+    # load den file
+    den = np.load(label_path)
+    den = den[0]
+    return data, den
 
 
 def remap(image, old_values, new_values):
