@@ -281,27 +281,54 @@ def main(train_loader, cal_loader, test_loader, test_set, args):
     coverage_cp, length_cp = compute_coverage(all_y_test, y_lower, y_upper, alpha, "tensor-RegressorNc")
 
     img_idx = 0
+    img_gt = {}
+    img_pred_den = {}
+    img_cp_upper = {}
+    img_cp_lower = {}
+    img_fcp_upper = {}
+    img_fcp_lower = {}
+    
+    model.eval()
     if args.visualize:
-        dataset = test_set
         for batch_idx, sample in enumerate(test_loader):
             img, den = sample
             cp_intervals = cp_test_intervals[batch_idx:batch_idx+1,:]
             fcp_intervals = fcp_test_intervals[batch_idx:batch_idx+1,:]
             batch_h, batch_w = den.shape[2], den.shape[3]
+
+            img = img.to(device).requires_grad_(False)
+            pre_den = model(img).cpu().detach().numpy()
+            
             for i in range(img.shape[0]):
                 # read original image
                 img_name = os.path.basename(test_loader.dataset.dataset.train_data[test_loader.dataset.indices[img_idx]])
                 base_name, extension = os.path.splitext(img_name)
             
-                cp_img_interval = cp_intervals[i][..., 0] - cp_intervals[i][..., 1]
+                cp_img_interval = abs(cp_intervals[i][..., 0] - cp_intervals[i][..., 1])
                 cp_img_interval = cp_img_interval.reshape(batch_h,batch_w)
-                visualize(cp_img_interval, height=batch_h, width=batch_w, save_dir=os.path.join(f'visualization/seed{seed}', 'vanilla-' + base_name + '.jpg'))
+                # visualize(cp_img_interval, height=batch_h, width=batch_w, save_dir=os.path.join(f'visualization/seed{seed}', 'vanilla-' + base_name + '.jpg'))
 
-                fcp_img_interval = fcp_intervals[i][..., 0] - fcp_intervals[i][..., 1]
+                fcp_img_interval = abs(fcp_intervals[i][..., 0] - fcp_intervals[i][..., 1])
                 fcp_img_interval = fcp_img_interval.reshape(batch_h,batch_w)
-                visualize(fcp_img_interval, height=batch_h, width=batch_w, save_dir=os.path.join(f'visualization/seed{seed}', 'fcp-' + base_name + '.jpg'))
+                # visualize(fcp_img_interval, height=batch_h, width=batch_w, save_dir=os.path.join(f'visualization/seed{seed}', 'fcp-' + base_name + '.jpg'))
                 img_idx += 1
+                
+                # save in pickle
+                img_gt[img_name] = den[i]
+                img_pred_den[img_name] = pre_den[i]
+                img_cp_upper[img_name] = cp_intervals[i][..., 1].reshape(batch_h,batch_w)
+                img_cp_lower[img_name] = cp_intervals[i][..., 0].reshape(batch_h,batch_w)
+                img_fcp_upper[img_name] = fcp_intervals[i][..., 1].reshape(batch_h,batch_w)
+                img_fcp_lower[img_name] = fcp_intervals[i][..., 0].reshape(batch_h,batch_w)
 
+
+
+
+    dictionaries = {'gt_den':img_gt,'pred_den':img_pred_den, 'cp_lower':img_cp_lower, 'cp_upper':img_cp_upper, 'fcp_lower':img_fcp_lower, 'fcp_upper':img_fcp_upper}
+    # Save the dictionaries to a pickle file
+    import pickle
+    with open('seed_0_result.pkl', 'wb') as f:
+        pickle.dump(dictionaries, f)
 
     return coverage_fcp, length_fcp, coverage_cp, length_cp
 
@@ -347,7 +374,8 @@ if __name__ == '__main__':
     for seed in args.seed:
         seed_torch(seed)
         os.environ['CUDA_VISIBLE_DEVICES'] = "{:}".format(args.device)
-        device = torch.device("cpu") if args.device < 0 else torch.device("cuda")
+        device = torch.device("cpu") if args.device < 0 else torch.device("cuda:1")
+        print("device",device)
 
         if args.visualize:
             makedirs(f"./visualization/seed{seed}")

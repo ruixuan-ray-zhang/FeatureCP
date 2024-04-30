@@ -117,16 +117,27 @@ def make_mcnn(device):
 
 
 if __name__ == "__main__":
-    model = make_mcnn()
+    device = torch.device("cuda")
+
+    model = make_mcnn(device=device)
 
     import h5py
     import numpy as np
-    fname = 'mcnn_shtechB.h5'
+    fname = '/home/vaecount/kevinyao/project/FeatureCP/model_zoo/mcnn/mcnn_shtechB.h5'
     h5f = h5py.File(fname, mode='r')
     for k, v in model.state_dict().items():        
         param = torch.from_numpy(np.asarray(h5f[k]))         
         v.copy_(param)
 
-    for name, param in model.named_parameters():
-        if param.requires_grad:
-            print(name, param.data)
+    # for name, param in model.named_parameters():
+    #     if param.requires_grad:
+    #         print(name, param.data)
+    
+    img_path = '/home/vaecount/kevinyao/data/shanghaitech/part_B/test_data/images/IMG_1.npy'
+    img = np.load(img_path)[0]
+    img = torch.from_numpy(img).float().to(device).requires_grad_(False)
+    img = img.unsqueeze(1)
+    model.eval()
+    print(img.shape)
+    den = model(img)
+    print(den.shape)

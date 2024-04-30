@@ -5,3 +5,4 @@ model_zoo/bmnet/bmnet_resnet_fsc147_nearest.pth
 model_zoo/loca/loca_few_shot.pt
 model_zoo/mcnn/mcnn_shtechB.h5
 visualization
+pickle_result
