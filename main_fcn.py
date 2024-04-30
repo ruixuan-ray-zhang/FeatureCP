@@ -113,7 +113,7 @@ def load_dataset(dataset, seed):
 
     whole_train_set = dataset(
         args.dataset_dir,
-        transform=image_transform,
+        transform=None,
         label_transform=None)
     
 
@@ -208,6 +208,17 @@ def main(train_loader, cal_loader, test_loader, test_set, args):
     else:
         raise ValueError("does not find the checkpoint in {}".format(dir))
 
+    # for x, y in tqdm(cal_loader):
+    #     x, y = x.to('cuda'), y.to('cuda')
+
+    #     norm = np.ones(len(x))
+    #     print(x.shape)
+
+    #     z_pred = model.DME.encoder(x)
+    #     print(z_pred.shape)
+    #     print('pred results ds ',model.DME.g(z_pred).sum())
+    # pdb.set_trace()
+
     print(f"==> Load model from {dir}")
     
     mean_estimator = helper.MSENet_RegressorAdapter(model=model, device=device, fit_params=None,
@@ -241,7 +252,6 @@ def main(train_loader, cal_loader, test_loader, test_set, args):
     img_idx = 0
     for x_test , y_test in tqdm(test_loader):
         intervals = icp.predict(x_test, significance=alpha)
-        print("intervals",intervals)
         # pdb.set_trace()
         fcp_test_intervals.append(intervals)
         all_y_test.append(y_test.reshape(y_test.shape[0],-1).cpu().numpy())

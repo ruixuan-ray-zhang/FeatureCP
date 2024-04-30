@@ -61,8 +61,9 @@ def pil_loader(data_path, label_path):
     Returns the image and the label as PIL images.
 
     """
-    data = Image.open(data_path)
-    data = data.convert("L")
+    data = np.load(data_path)[0]
+    # data = Image.open(data_path)
+    # data = data.convert("L")
     # load den file
     den = np.load(label_path)
     den = den[0]

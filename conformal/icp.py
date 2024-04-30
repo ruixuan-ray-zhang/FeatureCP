@@ -218,16 +218,19 @@ class FeatRegressorNc(BaseModelNc):
         each_step_z = []
         for _ in range(step):
             pred = self.model.model.DME.g(z)
+            # print('predit', pred.sum())
+            # print('GT', y.sum())
+            # print('pred',pred.requires_grad)
             if self.g_out_process is not None:
                 pred = self.g_out_process(pred)
-
-            loss = self.criterion(pred.squeeze(), y)
+            loss = self.criterion(pred.squeeze(), y)*1e5 + abs(y.sum()-pred.sum())
+            # print('loss', loss.item())
             optimizer.zero_grad()
             loss.backward()
             optimizer.step()
             if record_each_step:
                 each_step_z.append(z.detach().cpu().clone())
-
+        # pdb.set_trace()
         if record_each_step:
             return each_step_z
         else:
@@ -240,7 +243,7 @@ class FeatRegressorNc(BaseModelNc):
             raise NotImplementedError
         else:
             norm = np.ones(len(x))
-
+        print('start')
         err_dist_list = []
         for i, step_z_true in enumerate(each_step_z_true):
             err_dist = self.err_func.apply(z_pred.detach().cpu(), step_z_true.detach().cpu()).numpy() / norm
@@ -411,8 +414,6 @@ class FeatRegressorNc(BaseModelNc):
             self.model.model.out_shape = x.shape[2] * x.shape[3] // 16
             intervals = np.zeros((x.shape[0], self.model.model.out_shape, 2))
             feat_err_dist = self.err_func.apply_inverse(nc, significance)
-            print("feat_err_dist",feat_err_dist)
-            pdb.set_trace()
             if prediction.ndim > 1:
                 if isinstance(x, torch.Tensor):
                     x = x.to(self.model.device)

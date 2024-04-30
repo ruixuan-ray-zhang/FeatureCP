@@ -166,7 +166,8 @@ class Shanghaitech(data.Dataset):
             # Get the training data and labels filepaths
             self.train_data = utils.get_files(
                 os.path.join(root_dir, self.train_folder),
-                extension_filter=None)
+                name_filter=None,
+                extension_filter='npy')
 
             self.train_labels = utils.get_files(
                 os.path.join(root_dir, self.train_lbl_folder),
