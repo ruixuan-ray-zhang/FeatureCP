@@ -290,21 +290,16 @@ def main(train_loader, cal_loader, test_loader, test_set, args):
             batch_h, batch_w = den.shape[2], den.shape[3]
             for i in range(img.shape[0]):
                 # read original image
-                # file_name = dataset.data_list[batch_idx][i][0]
-                # print(test_loader.dataset.dataset.data_list[test_loader.dataset.indices[img_idx]])
-                file_name = os.path.basename(test_loader.dataset.dataset.train_data[test_loader.dataset.indices[img_idx]][0])
-                file_path = image_path = args.dataset_dir + '/test_data/images/' + file_name
-                # origin_img = Image.open(file_path).convert("RGB")
-                # origin_img = np.array(origin_img)
-                # h, w, _ = origin_img.shape
-
+                img_name = os.path.basename(test_loader.dataset.dataset.train_data[test_loader.dataset.indices[img_idx]])
+                base_name, extension = os.path.splitext(img_name)
+            
                 cp_img_interval = cp_intervals[i][..., 0] - cp_intervals[i][..., 1]
                 cp_img_interval = cp_img_interval.reshape(batch_h,batch_w)
-                visualize(cp_img_interval, height=batch_h, width=batch_w, save_dir=os.path.join(f'visualization/seed{seed}', 'vanilla-' + str(img_idx)))
+                visualize(cp_img_interval, height=batch_h, width=batch_w, save_dir=os.path.join(f'visualization/seed{seed}', 'vanilla-' + base_name + '.jpg'))
 
                 fcp_img_interval = fcp_intervals[i][..., 0] - fcp_intervals[i][..., 1]
                 fcp_img_interval = fcp_img_interval.reshape(batch_h,batch_w)
-                visualize(fcp_img_interval, height=batch_h, width=batch_w, save_dir=os.path.join(f'visualization/seed{seed}', 'fcp-' + str(img_idx)))
+                visualize(fcp_img_interval, height=batch_h, width=batch_w, save_dir=os.path.join(f'visualization/seed{seed}', 'fcp-' + base_name + '.jpg'))
                 img_idx += 1
 
 
