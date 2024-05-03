@@ -327,7 +327,8 @@ def main(train_loader, cal_loader, test_loader, test_set, args):
     dictionaries = {'gt_den':img_gt,'pred_den':img_pred_den, 'cp_lower':img_cp_lower, 'cp_upper':img_cp_upper, 'fcp_lower':img_fcp_lower, 'fcp_upper':img_fcp_upper}
     # Save the dictionaries to a pickle file
     import pickle
-    with open('seed_0_result.pkl', 'wb') as f:
+    file_name  = f"pickle_result/seed_0_{args.alpha}_result.pkl"
+    with open(file_name, 'wb') as f:
         pickle.dump(dictionaries, f)
 
     return coverage_fcp, length_fcp, coverage_cp, length_cp
