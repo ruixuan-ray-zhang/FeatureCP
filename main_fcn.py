@@ -121,7 +121,7 @@ def load_dataset(dataset, seed):
     query_transform = ext_transforms.get_query_transforms(is_train=True, exemplar_size=(128, 128))
 
     whole_train_set = dataset(data_dir=args.dataset_dir,
-                            data_list=args.dataset_dir +'/whole.txt',
+                            data_list=args.dataset_dir +'/test-val.txt',
                             box_number=3,
                             scaling=1.0,
                             main_transform=main_transform,
@@ -131,8 +131,8 @@ def load_dataset(dataset, seed):
     if args.data_seed is None:
         cal_test_generator = torch.Generator().manual_seed(seed)
     else:
-        cal_test_generator = torch.Generator().manual_seed(args.data_seed) #6135
-    train_set, val_set, cal_set, test_set = random_split(whole_train_set, [4800, 200, 400, len(whole_train_set) - 5400],
+        cal_test_generator = torch.Generator().manual_seed(args.data_seed) #2476
+    train_set, val_set, cal_set, test_set = random_split(whole_train_set, [2076, 200, 100, len(whole_train_set) - 2376],
                                                          generator=torch.Generator().manual_seed(0),
                                                          cal_test_generator=cal_test_generator)
 

@@ -1,6 +1,8 @@
 .DS_Store
+pickle_result
 .idea
-./visualization
+visualization
 model_zoo/bmnet/bmnet_resnet_fsc147.pth
 model_zoo/bmnet/bmnet_resnet_fsc147_nearest.pth
 model_zoo/loca/loca_few_shot.pt
+model_zoo/mcnn
